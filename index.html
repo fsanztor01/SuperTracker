@@ -1,0 +1,1551 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>TrainTracker</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="TrainTracker.css">
+
+</head>
+
+<body>
+    <!-- LOGIN/REGISTER SCREEN -->
+    <div id="authScreen" class="auth-screen">
+        <div class="auth-screen-content">
+            <div class="auth-brand">
+                <h1>TrainTracker</h1>
+                <p>Tu diario de entrenamiento personal</p>
+            </div>
+
+            <div class="auth-container">
+                <div id="authTabs" class="auth-tabs">
+                    <button class="auth-tab-btn active" data-tab="signin">Iniciar Sesión</button>
+                    <button class="auth-tab-btn" data-tab="signup">Registrarse</button>
+                </div>
+
+                <form id="authForm">
+                    <!-- Sign Up Fields (hidden by default) -->
+                    <div id="signupFields" style="display: none;">
+                        <div class="form-group">
+                            <label for="authFirstName">Nombre</label>
+                            <input type="text" id="authFirstName" class="input" autocomplete="given-name" />
+                        </div>
+                        <div class="form-group">
+                            <label for="authLastName">Apellidos</label>
+                            <input type="text" id="authLastName" class="input" autocomplete="family-name" />
+                        </div>
+                    </div>
+
+                    <!-- Common Fields -->
+                    <div class="form-group">
+                        <label for="authEmail">Email</label>
+                        <input type="email" id="authEmail" class="input" required autocomplete="email"
+                            placeholder="ejemplo@gmail.com" />
+                        <small class="form-hint">Solo se permiten: @gmail.com, @outlook.com, @hotmail.com,
+                            @yahoo.com</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="authPassword">Contraseña</label>
+                        <input type="password" id="authPassword" class="input" required
+                            autocomplete="current-password" />
+                    </div>
+
+                    <div id="authError" class="error-message" style="display: none;"></div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn--primary btn--block" id="authSubmit">Iniciar
+                            Sesión</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN APPLICATION (hidden until authenticated) -->
+    <div id="mainApp" style="display: none;">
+        <!-- HEADER -->
+        <header>
+            <div class="topbar">
+                <div class="brand" aria-label="TrainTracker">
+                    <strong class="brand__title">Developed by FJ-Sanz</strong>
+
+                </div>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <button class="theme-btn" id="btnManual" aria-label="Manual de Usuario"
+                        title="Manual de Usuario">ℹ️</button>
+                    <button class="theme-btn" id="themeToggle" aria-pressed="false" aria-label="Cambiar tema">🌙
+                        Oscuro</button>
+                </div>
+            </div>
+        </header>
+
+        <main class="container fade-in" id="main">
+            <!-- TABS -->
+            <div class="tabs" role="tablist" aria-label="Secciones">
+                <button class="tab-btn" role="tab" aria-selected="true" aria-controls="panel-diary" id="tab-diary">📝
+                    Diario</button>
+                <button class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-stats" id="tab-stats">📊
+                    Stats</button>
+                <button class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-profile"
+                    id="tab-profile">👤
+                    Perfil</button>
+                <button class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-routines"
+                    id="tab-routines">🧩
+                    Crear </button>
+                <button class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-goals" id="tab-goals">🎯
+                    Goals</button>
+                <button class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-social"
+                    id="tab-social">🫱🏼‍🫲🏽​
+                    Amigos</button>
+                <button class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-import" id="tab-import">📥
+                    Rutina</button>
+            </div>
+
+            <!-- DIARIO -->
+            <section class="panel" id="panel-diary" role="tabpanel" aria-labelledby="tab-diary" aria-hidden="false">
+                <div class="weekbar">
+                    <button class="btn btn--ghost" id="prevWeek">← Semana anterior</button>
+                    <div class="week-info" id="weekInfo">Semana actual</div>
+                    <button class="btn btn--ghost" id="nextWeek">Semana siguiente →</button>
+                </div>
+
+                <div class="diary-actions">
+                    <button class="btn" id="btnNewSession">+ Nueva sesión</button>
+                    <button class="btn btn--ghost" id="btnCopyLastWeek">📅 Copiar dia actual de la semana
+                        pasada</button>
+                </div>
+
+                <article class="summary card pop" aria-labelledby="summaryTitle">
+                    <h2 class="summary__title" id="summaryTitle">Resumen semanal</h2>
+                    <div class="summary__grid">
+                        <div class="kpi">
+                            <div class="kpi__label">Sesiones</div>
+                            <div class="kpi__value" id="kpiSessions">0</div>
+                        </div>
+                        <div class="kpi">
+                            <div class="kpi__label">Ejercicio con más progreso</div>
+                            <div class="kpi__value" id="kpiTop">–</div>
+                        </div>
+                        <div class="kpi">
+                            <div class="kpi__label">Volumen total</div>
+                            <div class="kpi__value" id="kpiVolume">0 kg</div>
+                        </div>
+                        <div class="kpi">
+                            <div class="kpi__label">RIR promedio</div>
+                            <div class="kpi__value" id="kpiRIR">–</div>
+                        </div>
+                    </div>
+                </article>
+
+                <section class="sessions" id="sessions" aria-live="polite"></section>
+                <div class="empty card pop" id="emptyState" hidden>
+                    <div aria-hidden="true" style="font-size:1.6rem">📝</div>
+                    <h3 style="margin:0">No hay entrenos esta semana</h3>
+                    <p style="margin:0">Crea una sesión o importa una plantilla.</p>
+                </div>
+            </section>
+
+            <!-- ESTADISTICAS -->
+            <section class="panel" id="panel-stats" role="tabpanel" aria-labelledby="tab-stats" aria-hidden="true">
+                <!-- Filtros compartidos -->
+                <article class="card pop" style="padding:12px; margin-bottom:10px">
+                    <h3 class="summary__title" style="margin-bottom:10px">Filtros</h3>
+                    <div class="chart-controls">
+                        <div class="chart-control-group">
+                            <label class="chart-control-label" for="sharedMetric">Métrica</label>
+                            <select id="sharedMetric" class="chart-select" aria-label="Selecciona métrica">
+                                <option value="volume">Volumen total</option>
+                                <option value="rir">RIR promedio</option>
+                                <option value="weight">Peso máximo</option>
+                            </select>
+                        </div>
+                        <div class="chart-control-group">
+                            <label class="chart-control-label" for="sharedExercise">Ejercicio</label>
+                            <div class="exercise-search-wrapper">
+                                <input type="text" id="sharedExercise" class="exercise-search-input"
+                                    placeholder="Todos los ejercicios" aria-label="Buscar ejercicio"
+                                    autocomplete="off" />
+                                <span class="exercise-search-icon">🔍</span>
+                                <div id="exerciseSuggestions" class="exercise-suggestions" style="display: none;"></div>
+                            </div>
+                        </div>
+                        <div class="chart-control-group">
+                            <label class="chart-control-label" for="sharedPeriod">Periodo</label>
+                            <select id="sharedPeriod" class="chart-select" aria-label="Selecciona periodo de semanas">
+                                <option value="4">Últimas 4 semanas</option>
+                                <option value="8" selected>Últimas 8 semanas</option>
+                                <option value="12">Últimas 12 semanas</option>
+                            </select>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="card chart-card pop">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <h3 class="summary__title" style="margin-bottom:0">Progreso semanal</h3>
+                        <select id="chartType" class="chart-select" style="width: auto; min-width: 140px;"
+                            aria-label="Tipo de gráfico">
+                            <option value="bar">Barras</option>
+                            <option value="pie" selected>Circular</option>
+                        </select>
+                    </div>
+                    <canvas id="progressChart" aria-label="Gráfico de progreso" role="img"></canvas>
+                </article>
+
+                <article class="card pop" style="padding:10px; margin-top:10px">
+                    <h3 class="summary__title" style="margin-bottom:6px">Estadísticas detalladas</h3>
+                    <div class="stats-table-container">
+                        <table class="table stats-table" id="statsTable">
+                            <thead>
+                                <tr>
+                                    <th>Ejercicio</th>
+                                    <th>Sesiones</th>
+                                    <th>KG máximo</th>
+                                    <th>Total reps</th>
+                                    <th>Volumen total</th>
+                                    <th>RIR promedio</th>
+                                    <th>Progreso (%)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="statsBody">
+                                <tr>
+                                    <td colspan="7" style="padding:16px">No hay datos suficientes</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </article>
+            </section>
+
+            <!-- PERFIL -->
+            <section class="panel" id="panel-profile" role="tabpanel" aria-labelledby="tab-profile" aria-hidden="true">
+                <article class="card pop" style="padding:16px">
+                    <h3 class="summary__title" style="margin-bottom:10px">Mi Perfil</h3>
+                    <div class="profile-layout">
+                        <div class="profile-avatar-wrapper">
+                            <img id="profileAvatar" class="profile-avatar" alt="Avatar" src="" />
+                            <div class="avatar-controls" style="display:grid; gap:10px; width:100%">
+                                <div class="field">
+                                    <label class="label" for="avatarStyle">Estilo de avatar</label>
+                                    <select id="avatarStyle" class="input">
+                                        <option value="avataaars">Avataaars</option>
+                                        <option value="pixel-art">Pixel Art</option>
+                                        <option value="adventurer">Adventurer</option>
+                                        <option value="big-smile">Big Smile</option>
+                                        <option value="bottts">Bottts</option>
+                                        <option value="fun-emoji">Fun Emoji</option>
+                                        <option value="icons">Icons</option>
+                                        <option value="identicon">Identicon</option>
+                                        <option value="lorelei">Lorelei</option>
+                                        <option value="micah">Micah</option>
+                                        <option value="miniavs">Miniavs</option>
+                                        <option value="notionists">Notionists</option>
+                                        <option value="open-peeps">Open Peeps</option>
+                                        <option value="personas">Personas</option>
+                                        <option value="rings">Rings</option>
+                                        <option value="shapes">Shapes</option>
+                                        <option value="thumbs">Thumbs</option>
+                                    </select>
+                                </div>
+                                <button type="button" class="btn btn--ghost" id="generateAvatar">Generar nuevo
+                                    avatar</button>
+                                <div
+                                    style="text-align:center; color:var(--muted); font-size:0.85rem; padding:8px 0; border-top:1px solid var(--border); border-bottom:1px solid var(--border)">
+                                    O</div>
+                                <label class="label" for="profilePhoto" style="width:100%; text-align:center">Subir foto
+                                    propia</label>
+                                <input id="profilePhoto" type="file" accept="image/*" class="input" />
+                                <button type="button" class="btn btn--ghost btn--danger" id="removePhoto"
+                                    style="display:none">Eliminar foto</button>
+                            </div>
+                        </div>
+                        <div class="profile-form">
+                            <div class="field"><label class="label" for="profileFirstName">Nombre</label><input
+                                    id="profileFirstName" class="input" placeholder="Nombre" /></div>
+                            <div class="field"><label class="label" for="profileLastName">Apellidos</label><input
+                                    id="profileLastName" class="input" placeholder="Apellidos" /></div>
+                            <div class="field"><label class="label" for="profileHeight">Altura (cm)</label><input
+                                    id="profileHeight" class="input" type="number" inputmode="decimal" min="0"
+                                    step="0.1" placeholder="Ej. 178" /></div>
+                            <div class="field"><label class="label" for="profileWeight">Peso actual (kg)</label><input
+                                    id="profileWeight" class="input" type="number" inputmode="decimal" min="0"
+                                    step="0.1" placeholder="Opcional" /></div>
+                            <div class="field"><label class="label" for="profileBodyFat">% grasa actual</label><input
+                                    id="profileBodyFat" class="input" type="number" inputmode="decimal" min="0"
+                                    step="0.1" placeholder="Opcional" /></div>
+                            <button class="btn" id="saveProfile" type="button">Actualizar perfil</button>
+                            <button class="btn btn--danger" id="authBtn" type="button"
+                                style="display: none; margin-top: 12px;">Cerrar Sesión</button>
+                        </div>
+                    </div>
+
+                    <!-- Color Picker Section -->
+                    <div class="color-picker-section">
+                        <h3 class="summary__title" style="margin-bottom:16px">Personalizar colores</h3>
+
+                        <div class="color-picker-group">
+                            <label class="color-picker-label">Color para modo oscuro</label>
+                            <div class="color-swatches" id="colorSwatchesDark"></div>
+                        </div>
+
+                        <div class="color-picker-group">
+                            <label class="color-picker-label">Color para modo claro</label>
+                            <div class="color-swatches" id="colorSwatchesLight"></div>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="card pop profile-history" style="padding:16px; margin-top:12px">
+                    <h3 class="summary__title" style="margin-bottom:8px">Historial de peso y % grasa</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Peso (kg)</th>
+                                <th>% Grasa</th>
+                            </tr>
+                        </thead>
+                        <tbody id="profileHistoryBody">
+                            <tr>
+                                <td colspan="3" style="padding:8px">Sin registros aún</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </article>
+
+                <article class="card pop" style="padding:16px; margin-top:12px">
+                    <h3 class="summary__title" style="margin-bottom:16px">Medidas Corporales</h3>
+                    <div class="body-measurements-form" style="display:grid; gap:12px; margin-bottom:16px">
+                        <div class="field">
+                            <label class="label" for="measurementArms">Brazos (cm)</label>
+                            <input id="measurementArms" class="input" type="number" inputmode="decimal" min="0"
+                                step="0.1" placeholder="Ej. 35.5" />
+                        </div>
+                        <div class="field">
+                            <label class="label" for="measurementChest">Pecho (cm)</label>
+                            <input id="measurementChest" class="input" type="number" inputmode="decimal" min="0"
+                                step="0.1" placeholder="Ej. 100" />
+                        </div>
+                        <div class="field">
+                            <label class="label" for="measurementWaist">Cintura (cm)</label>
+                            <input id="measurementWaist" class="input" type="number" inputmode="decimal" min="0"
+                                step="0.1" placeholder="Ej. 80" />
+                        </div>
+                        <div class="field">
+                            <label class="label" for="measurementHips">Caderas (cm)</label>
+                            <input id="measurementHips" class="input" type="number" inputmode="decimal" min="0"
+                                step="0.1" placeholder="Ej. 95" />
+                        </div>
+                        <div class="field">
+                            <label class="label" for="measurementLegs">Piernas (cm)</label>
+                            <input id="measurementLegs" class="input" type="number" inputmode="decimal" min="0"
+                                step="0.1" placeholder="Ej. 60" />
+                        </div>
+                        <div class="field">
+                            <label class="label" for="measurementCalves">Gemelos (cm)</label>
+                            <input id="measurementCalves" class="input" type="number" inputmode="decimal" min="0"
+                                step="0.1" placeholder="Ej. 38" />
+                        </div>
+                        <button class="btn" id="saveBodyMeasurements" type="button">Guardar medidas</button>
+                    </div>
+                    <div class="body-measurements-history">
+                        <h4 class="summary__title" style="margin-bottom:8px; font-size:1rem">Historial de medidas</h4>
+                        <div style="overflow-x:auto">
+                            <table style="width:100%; border-collapse:collapse; font-size:0.9rem">
+                                <thead>
+                                    <tr>
+                                        <th style="padding:8px; border-bottom:1px solid var(--border); text-align:left">
+                                            Fecha</th>
+                                        <th style="padding:8px; border-bottom:1px solid var(--border); text-align:left">
+                                            Brazos</th>
+                                        <th style="padding:8px; border-bottom:1px solid var(--border); text-align:left">
+                                            Pecho</th>
+                                        <th style="padding:8px; border-bottom:1px solid var(--border); text-align:left">
+                                            Cintura</th>
+                                        <th style="padding:8px; border-bottom:1px solid var(--border); text-align:left">
+                                            Caderas</th>
+                                        <th style="padding:8px; border-bottom:1px solid var(--border); text-align:left">
+                                            Piernas</th>
+                                        <th style="padding:8px; border-bottom:1px solid var(--border); text-align:left">
+                                            Gemelos</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="bodyMeasurementsHistoryBody">
+                                    <tr>
+                                        <td colspan="7" style="padding:8px; color:var(--muted)">Sin registros aún</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="card pop" style="padding:16px; margin-top:12px">
+                    <h3 class="summary__title" style="margin-bottom:16px">Calculadora de TMB y Calorías</h3>
+                    <div class="bmr-calculator" style="display:grid; gap:12px">
+                        <div class="field">
+                            <label class="label" for="bmrGender">Sexo</label>
+                            <select id="bmrGender" class="input">
+                                <option value="male">Hombre</option>
+                                <option value="female">Mujer</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label class="label" for="bmrAge">Edad</label>
+                            <input id="bmrAge" class="input" type="number" min="1" max="120" placeholder="Ej. 30" />
+                        </div>
+                        <div class="field">
+                            <label class="label" for="bmrActivity">Nivel de actividad</label>
+                            <select id="bmrActivity" class="input">
+                                <option value="1.2">Sedentario (poco o ningún ejercicio)</option>
+                                <option value="1.375">Ligera (ejercicio 1-3 días/semana)</option>
+                                <option value="1.55">Moderada (ejercicio 3-5 días/semana)</option>
+                                <option value="1.725">Intensa (ejercicio 6-7 días/semana)</option>
+                                <option value="1.9">Muy intensa (ejercicio 2 veces/día)</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label class="label" for="bmrGoal">Objetivo</label>
+                            <select id="bmrGoal" class="input">
+                                <option value="maintain">Mantener peso</option>
+                                <option value="lose">Perder grasa</option>
+                                <option value="gain">Ganar masa muscular</option>
+                            </select>
+                        </div>
+                        <button class="btn" id="calculateBMR" type="button">Calcular</button>
+                    </div>
+                    <div id="bmrResults"
+                        style="margin-top:20px; padding:16px; background:var(--bg-secondary); border-radius:8px; display:none">
+                        <h4 class="summary__title" style="margin-bottom:12px; font-size:1rem">Resultados</h4>
+                        <div style="display:grid; gap:8px">
+                            <div><strong>TMB (Tasa Metabólica Basal):</strong> <span id="bmrValue">—</span> kcal/día
+                            </div>
+                            <div><strong>TDEE (Gasto Energético Total):</strong> <span id="tdeeValue">—</span> kcal/día
+                            </div>
+                            <div style="margin-top:8px; padding-top:8px; border-top:1px solid var(--border)">
+                                <strong>Calorías recomendadas:</strong>
+                                <div style="margin-top:4px; color:var(--accent)" id="recommendedCalories">—</div>
+                            </div>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="card pop" style="padding:16px; margin-top:12px">
+                    <h3 class="summary__title" style="margin-bottom:8px">Notas rápidas</h3>
+                    <div class="notes-form">
+                        <label class="label" for="noteText">Nueva nota (máx. 200 caracteres)</label>
+                        <textarea id="noteText" class="input" maxlength="200"
+                            placeholder="Escribe tu nota..."></textarea>
+                        <button class="btn btn--secondary" id="addNote" type="button">Guardar nota</button>
+                    </div>
+                    <div class="notes-list" id="notesList"></div>
+                    <div class="routine-empty" id="notesEmpty">Aún no hay notas.</div>
+                </article>
+
+                <article class="card pop" style="padding:16px; margin-top:12px">
+                    <h3 class="summary__title" style="margin-bottom:16px">🏆 Modo Competitivo</h3>
+                    <div class="competitive-stats">
+                        <div class="streak-display">
+                            <div class="streak-label">🔥 Racha actual</div>
+                            <div class="streak-value" id="currentStreak">0</div>
+                            <div style="font-size:0.85rem; color:var(--muted)">días consecutivos</div>
+                        </div>
+                        <div class="weekly-goal">
+                            <div
+                                style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+                                <span style="font-weight:600; color:var(--heading)">Meta semanal</span>
+                                <span id="weeklyGoalProgress" style="font-size:0.85rem; color:var(--muted)">0 / 3</span>
+                            </div>
+                            <div class="goal-progress">
+                                <div class="goal-progress-bar" id="weeklyGoalBar" style="width:0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="margin-top:20px">
+                        <h4 class="summary__title" style="font-size:0.95rem; margin-bottom:12px">Logros desbloqueados
+                        </h4>
+                        <div class="achievements-list" id="achievementsList">
+                            <div class="routine-empty">Aún no hay logros. ¡Sigue entrenando!</div>
+                        </div>
+                    </div>
+                </article>
+            </section>
+
+            <!-- RUTINAS -->
+            <section class="panel" id="panel-routines" role="tabpanel" aria-labelledby="tab-routines"
+                aria-hidden="true">
+                <div class="routine-panel">
+                    <article class="card pop routine-card">
+                        <h3 class="summary__title" style="margin-bottom:6px">Crear rutina personalizada</h3>
+                        <div class="field">
+                            <label class="label" for="routineName">Nombre de la rutina</label>
+                            <input id="routineName" class="input" placeholder="Ej. Fuerza 4 días" />
+                        </div>
+                        <div class="routine-builder__controls">
+                            <button class="btn btn--ghost" id="addRoutineDay">+ Añadir día</button>
+                            <button class="btn btn--secondary" id="saveRoutine">Guardar rutina</button>
+                            <button class="btn btn--ghost" id="resetRoutine">Limpiar</button>
+                        </div>
+                        <div class="routine-days" id="routineDays"></div>
+                        <p style="color:var(--muted); font-size:.85rem; margin:10px 0 0">
+                            Añade días, ejercicios y sets para construir tu rutina personalizada.
+                        </p>
+                    </article>
+                    <article class="card pop routine-card">
+                        <h3 class="summary__title" style="margin-bottom:6px">Rutinas creadas</h3>
+                        <div class="routine-created__list" id="createdRoutineList"></div>
+                        <div class="routine-empty" id="noCreatedRoutines">Todavía no has creado rutinas.</div>
+                    </article>
+                    <article class="card pop routine-card">
+                        <h3 class="summary__title" style="margin-bottom:6px">Rutinas por defecto</h3>
+                        <div class="routine-default__list" id="defaultRoutineList"></div>
+                    </article>
+                </div>
+            </section>
+
+            <!-- OBJETIVOS -->
+            <section class="panel" id="panel-goals" role="tabpanel" aria-labelledby="tab-goals" aria-hidden="true">
+                <article class="card pop">
+                    <details class="goals-details" open>
+                        <summary class="goals-summary">
+                            <h3 class="summary__title" style="margin-bottom:0; display:inline">🎯 Mis Objetivos</h3>
+                        </summary>
+                        <div class="goals-header" style="margin-top:12px">
+                            <button class="btn" id="btnNewGoal">+ Nuevo Objetivo</button>
+                        </div>
+                        <div class="goals-list" id="goalsList">
+                            <div class="routine-empty" id="noGoals">Aún no tienes objetivos. ¡Crea tu primer objetivo!
+                            </div>
+                        </div>
+                    </details>
+                </article>
+
+                <article class="card pop" style="margin-top:16px">
+                    <h3 class="summary__title" style="margin-bottom:12px">🏆 Logros Recientes</h3>
+                    <div class="achievements-recent" id="recentAchievements">
+                        <div class="routine-empty">Aún no hay logros recientes.</div>
+                    </div>
+                </article>
+
+                <article class="card pop" style="margin-top:16px">
+                    <details class="achievements-details">
+                        <summary class="achievements-summary">
+                            <h3 class="summary__title" style="margin-bottom:0; display:inline">📋 Todos los Logros</h3>
+                        </summary>
+                        <div class="achievements-all" id="allAchievements" style="margin-top:12px">
+                            <div class="routine-empty">Aún no hay logros.</div>
+                        </div>
+                    </details>
+                </article>
+            </section>
+
+            <!-- SOCIAL / CONECTAR -->
+            <section class="panel" id="panel-social" role="tabpanel" aria-labelledby="tab-social" aria-hidden="true">
+                <article class="card pop" style="padding:16px; margin-bottom:16px">
+                    <h3 class="summary__title" style="margin-bottom:10px">Mi Perfil Social</h3>
+                    <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px">
+                        <img id="socialAvatar" class="profile-avatar" style="width:60px; height:60px" alt="Avatar"
+                            src="" />
+                        <div>
+                            <div id="socialName" style="font-weight:700; font-size:1.1rem; color:var(--heading)">Usuario
+                            </div>
+                            <div id="socialEmail" style="color:var(--muted); font-size:0.9rem">email@ejemplo.com</div>
+                        </div>
+                    </div>
+                    <p style="font-size:0.9rem; color:var(--muted)">Comparte tu email con tus amigos para que puedan
+                        enviarte una solicitud.</p>
+                </article>
+
+                <article class="card pop" style="padding:16px; margin-bottom:16px">
+                    <h3 class="summary__title" style="margin-bottom:10px">Conectar con amigos</h3>
+                    <div class="field">
+                        <label class="label" for="friendEmail">Email del amigo</label>
+                        <div style="display:flex; gap:8px">
+                            <input id="friendEmail" class="input" type="email" placeholder="amigo@gmail.com" />
+                            <button class="btn" id="btnSendRequest">Enviar solicitud</button>
+                        </div>
+                    </div>
+                    <div id="socialFeedback" class="toast hidden" style="margin-top:10px"></div>
+                </article>
+
+                <article class="card pop" style="padding:16px; margin-bottom:16px">
+                    <h3 class="summary__title" style="margin-bottom:10px">Solicitudes pendientes</h3>
+                    <div id="pendingRequestsList" class="routine-import__list">
+                        <div class="routine-empty">No tienes solicitudes pendientes.</div>
+                    </div>
+                </article>
+
+                <article class="card pop" style="padding:16px">
+                    <h3 class="summary__title" style="margin-bottom:10px">Mis Amigos</h3>
+                    <div id="friendsList" class="routine-import__list">
+                        <div class="routine-empty">Aún no tienes amigos conectados.</div>
+                    </div>
+                </article>
+            </section>
+
+            <!-- IMPORTAR -->
+            <section class="panel" id="panel-import" role="tabpanel" aria-labelledby="tab-import" aria-hidden="true">
+                <article class="card pop import-section">
+                    <h3 class="summary__title">Importar entrenamientos</h3>
+                    <div class="field">
+                        <label class="label" for="targetWeek">Semana objetivo</label>
+                        <select id="targetWeek" class="input" aria-describedby="targetHelp"></select>
+                        <div id="targetHelp" style="color:var(--muted); font-size:.9rem">Las sesiones se ubicarán (lunes
+                            a
+                            domingo) en la semana seleccionada.</div>
+                    </div>
+                    <div class="field">
+                        <label class="label" for="fileInput">Archivo JSON</label>
+                        <input id="fileInput" type="file" accept="application/json,.json" class="input"
+                            aria-describedby="fileHelp" />
+                        <div id="fileHelp" style="color:var(--muted); font-size:.9rem">Se valida el contenido antes de
+                            integrarlo.</div>
+                    </div>
+                    <div id="importAlert" class="toast toast--err hidden" role="alert" aria-live="assertive"></div>
+                    <div id="importErrorList" class="import-error-list hidden"></div>
+                    <div id="preview" class="card hidden" style="padding:10px; margin-top:8px">
+                        <strong>Vista previa:</strong>
+                        <ul id="previewList" style="margin:6px 0 0 16px; padding:0; list-style:disc"></ul>
+                    </div>
+                    <div class="modal__actions" style="padding:0; margin-top:8px">
+                        <button class="btn btn--secondary" id="btnImport">Importar</button>
+                        <button class="btn btn--ghost" id="btnExport">Exportar sesiones</button>
+                    </div>
+                </article>
+
+                <article class="card pop" style="padding:12px; margin-top:10px">
+                    <h4 class="summary__title" style="margin:0">Plantillas rápidas</h4>
+                    <div class="template-buttons" id="templateButtons" style="margin-top:8px">
+                        <button class="btn btn--ghost" data-template="3day">💪 3 días</button>
+                        <button class="btn btn--ghost" data-template="4day">🔥 4 días</button>
+                        <button class="btn btn--ghost" data-template="5day">🏋️ 5 días</button>
+                        <button class="btn btn--ghost" data-template="ppl">⚡ PPL 6 días</button>
+                    </div>
+                </article>
+
+                <article class="card pop" style="padding:12px; margin-top:10px">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+                        <h4 class="summary__title" style="margin:0">Rutinas creadas</h4>
+                        <div style="display:flex; gap:8px; align-items:center">
+                            <button class="btn btn--ghost" id="btnImportRoutines"
+                                style="font-size:0.85rem; padding:6px 12px">🧑🏼‍💻​ Importar rutinas</button>
+                            <button class="btn btn--ghost" id="btnExportRoutines"
+                                style="font-size:0.85rem; padding:6px 12px">📤 Exportar rutinas</button>
+                        </div>
+                    </div>
+                    <input id="routineFileInput" type="file" accept="application/json,.json" style="display:none" />
+                    <div id="routineFileInputContainer" style="display:none; margin-bottom:8px">
+                        <div id="routineImportAlert" class="toast toast--err hidden" role="alert" aria-live="assertive">
+                        </div>
+                        <div id="routineImportErrorList" class="import-error-list hidden"></div>
+                        <div id="routinePreview" class="card hidden" style="padding:10px; margin-top:8px">
+                            <strong>Vista previa:</strong>
+                            <ul id="routinePreviewList" style="margin:6px 0 0 16px; padding:0; list-style:disc"></ul>
+                        </div>
+                        <div class="modal__actions" style="padding:0; margin-top:8px">
+                            <button class="btn btn--secondary" id="btnConfirmImportRoutines">Importar</button>
+                            <button class="btn btn--ghost" id="btnCancelImportRoutines">Cancelar</button>
+                        </div>
+                    </div>
+                    <div id="importRoutineList" class="routine-import__list"></div>
+                    <div class="routine-empty" id="importRoutineEmpty">Aún no tienes rutinas guardadas.</div>
+                </article>
+            </section>
+        </main>
+
+        <!-- BOTTOM NAV -->
+        <nav class="bottom-nav" aria-label="Navegación inferior">
+            <button class="nav-btn" id="navDiary" aria-current="page" aria-label="TrainTracker">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path
+                        d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H6.5A2.5 2.5 0 0 0 4 4.5v15Z" />
+                    <path d="M8 2v4" />
+                    <path d="M16 2v4" />
+                    <path d="M4 10h16" />
+                    <path d="M8 14h8" />
+                    <path d="M8 18h6" />
+                </svg>
+                <span>TrainTracker</span>
+            </button>
+            <button class="nav-btn" id="navStats" aria-label="Estadísticas">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 3v18h18" />
+                    <path d="M13 17V9" />
+                    <path d="M18 17V5" />
+                    <path d="M8 17v-3" />
+                </svg>
+                <span>Estadísticas</span>
+            </button>
+            <button class="nav-btn" id="navImport" aria-label="Importar">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                <span>Importar</span>
+            </button>
+        </nav>
+
+        <!-- MODALES -->
+        <dialog id="sessionDialog" aria-labelledby="sessionTitle" aria-modal="true">
+            <form method="dialog">
+                <div class="modal__head">
+                    <h3 class="modal__title" id="sessionTitle">Nueva sesión</h3>
+                    <button class="theme-btn" value="cancel" aria-label="Cerrar">Cerrar</button>
+                </div>
+                <div class="modal__body">
+                    <div class="field"><label class="label" for="sessionName">Nombre</label><input id="sessionName"
+                            class="input" placeholder="Ej. Pecho/Espalda" /></div>
+                    <div class="field"><label class="label" for="sessionDate">Fecha</label><input id="sessionDate"
+                            class="input" type="date" /></div>
+                </div>
+                <div class="modal__actions"><button class="btn btn--ghost" value="cancel">Cancelar</button><button
+                        class="btn" id="saveSession" value="default">Guardar</button></div>
+            </form>
+        </dialog>
+
+        <dialog id="editSessionDialog" aria-labelledby="editSessionTitle" aria-modal="true">
+            <form method="dialog">
+                <div class="modal__head">
+                    <h3 class="modal__title" id="editSessionTitle">Editar sesión</h3>
+                    <button class="theme-btn" value="cancel" aria-label="Cerrar">Cerrar</button>
+                </div>
+                <div class="modal__body">
+                    <div class="field"><label class="label" for="editSessionName">Nombre</label><input
+                            id="editSessionName" class="input" placeholder="Ej. Pecho/Espalda" /></div>
+                    <div class="field"><label class="label" for="editSessionDate">Fecha</label><input
+                            id="editSessionDate" class="input" type="date" /></div>
+                </div>
+                <div class="modal__actions"><button class="btn btn--ghost" value="cancel">Cancelar</button><button
+                        class="btn" id="updateSession" value="default">Actualizar</button></div>
+            </form>
+        </dialog>
+
+        <dialog id="exerciseDialog" aria-labelledby="exerciseTitle" aria-modal="true">
+            <form method="dialog">
+                <div class="modal__head">
+                    <h3 class="modal__title" id="exerciseTitle">Nuevo ejercicio</h3>
+                    <button class="theme-btn" value="cancel" aria-label="Cerrar">Cerrar</button>
+                </div>
+                <div class="modal__body">
+                    <div class="field"><label class="label" for="exerciseName">Nombre del ejercicio</label><input
+                            id="exerciseName" class="input" placeholder="Ej. Press banca" /></div>
+                </div>
+                <div class="modal__actions"><button class="btn btn--ghost" value="cancel">Cancelar</button><button
+                        class="btn" id="saveExercise" value="default">Guardar</button></div>
+            </form>
+        </dialog>
+
+        <dialog id="exerciseNoteDialog" aria-labelledby="exerciseNoteTitle" aria-modal="true">
+            <form method="dialog">
+                <div class="modal__head">
+                    <h3 class="modal__title" id="exerciseNoteTitle">Nota del ejercicio</h3>
+                    <button class="theme-btn" value="cancel" aria-label="Cerrar">Cerrar</button>
+                </div>
+                <div class="modal__body">
+                    <div class="field">
+                        <label class="label" for="exerciseNoteText">Nota (puedes usar saltos de línea)</label>
+                        <textarea id="exerciseNoteText" class="input" rows="6"
+                            placeholder="Escribe tu nota aquí..."></textarea>
+                    </div>
+                </div>
+                <div class="modal__actions">
+                    <button class="btn btn--ghost" value="cancel">Cancelar</button>
+                    <button class="btn btn--secondary" id="saveExerciseNote" value="default">Guardar</button>
+                </div>
+            </form>
+        </dialog>
+
+        <dialog id="manualDialog" aria-labelledby="manualTitle" aria-modal="true">
+            <form method="dialog">
+                <div class="modal__head">
+                    <h3 class="modal__title" id="manualTitle">Manual de Usuario - TrainTracker</h3>
+                    <button class="theme-btn" value="cancel" aria-label="Cerrar">✕</button>
+                </div>
+                <div class="modal__body">
+                    <div class="manual-content">
+                        <div class="manual-section">
+                            <h2>📋 Tabla de Contenidos</h2>
+                            <div class="manual-toc">
+                                <ul>
+                                    <li><a href="#inicio">Inicio</a></li>
+                                    <li><a href="#diario">Diario de Entrenamientos</a></li>
+                                    <li><a href="#estadisticas">Estadísticas</a></li>
+                                    <li><a href="#perfil">Perfil</a></li>
+                                    <li><a href="#rutinas">Rutinas</a></li>
+                                    <li><a href="#objetivos">Objetivos</a></li>
+                                    <li><a href="#importar">Importar/Exportar</a></li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="manual-section" id="inicio">
+                            <h2>🏋️‍♂️ Inicio</h2>
+                            <h3>¿Qué es TrainTracker?</h3>
+                            <p>TrainTracker es una aplicación web para registrar y analizar tus entrenamientos,
+                                ayudándote a
+                                mejorar tu progreso y alcanzar tus metas.</p>
+
+                            <h3>Navegación</h3>
+                            <ul>
+                                <li><strong>Menú superior:</strong> Pestañas principales (Diario, Estadísticas, Perfil,
+                                    etc.)</li>
+                                <li><strong>Navegación inferior:</strong> Acceso rápido a Diario, Estadísticas e
+                                    Importar
+                                </li>
+                                <li><strong>Cambio de tema:</strong> Botón en la esquina superior derecha para cambiar
+                                    entre
+                                    modo oscuro/claro</li>
+                            </ul>
+                        </div>
+
+                        <div class="manual-section" id="diario">
+                            <h2>📝 Diario</h2>
+                            <h3>Crear una sesión</h3>
+                            <ul>
+                                <li>Pulsa "+ Nueva sesión"</li>
+                                <li>Ingresa el nombre (ej: "Pecho y tríceps")</li>
+                                <li>Selecciona la fecha</li>
+                                <li>Pulsa "Guardar"</li>
+                            </ul>
+
+                            <h3>Añadir ejercicios</h3>
+                            <ul>
+                                <li>Dentro de una sesión, pulsa "+ Ejercicio" en cualquier momento</li>
+                                <li>No necesitas activar ningún modo de edición</li>
+                                <li>Ingresa el nombre del ejercicio y pulsa "Guardar"</li>
+                            </ul>
+
+                            <h3>Editar nombres de ejercicios</h3>
+                            <ul>
+                                <li>Haz clic directamente sobre el nombre del ejercicio para editarlo</li>
+                                <li>Aparecerán botones "💾 Guardar" y "✕ Cancelar" para confirmar o descartar el cambio
+                                </li>
+                                <li>También puedes presionar Enter para guardar o Escape para cancelar</li>
+                                <li>Al cambiar el nombre, las estadísticas del nombre anterior no contarán (solo el
+                                    nuevo
+                                    nombre)</li>
+                            </ul>
+
+                            <h3>Registrar sets</h3>
+                            <p>Para cada ejercicio, puedes añadir:</p>
+                            <ul>
+                                <li><strong>KG:</strong> Peso levantado</li>
+                                <li><strong>Reps:</strong> Repeticiones realizadas</li>
+                                <li><strong>RIR:</strong> Repeticiones en reserva (esfuerzo percibido)</li>
+                            </ul>
+
+                            <h3>Temporizador de descanso</h3>
+                            <ul>
+                                <li>Pulsa el botón ⏳ junto a cada set para activar el temporizador</li>
+                                <li>En móvil, aparecerá una ventana flotante centrada en la pantalla</li>
+                                <li>Cuando termine el tiempo, verás un mensaje de confirmación y se cerrará
+                                    automáticamente</li>
+                            </ul>
+
+                            <h3>Ver datos de la semana pasada</h3>
+                            <ul>
+                                <li>Pulsa el botón 👁️ junto a cada set para ver los datos de la semana pasada</li>
+                                <li>Los valores aparecerán en el color del tema seleccionado para fácil identificación
+                                </li>
+                                <li>Vuelve a pulsar el botón para restaurar tus valores originales</li>
+                            </ul>
+
+                            <h3>Editar sesión</h3>
+                            <ul>
+                                <li>El botón ✏️ solo sirve para cambiar el nombre y la fecha de la sesión</li>
+                                <li>Al pulsarlo, se abrirá un diálogo donde puedes modificar estos datos</li>
+                                <li>No necesitas activar ningún modo para añadir ejercicios o editar nombres</li>
+                            </ul>
+
+                            <h3>Notas de ejercicios</h3>
+                            <ul>
+                                <li>Pulsa "+ Nota" junto al nombre del ejercicio</li>
+                                <li>Escribe tu nota (puedes usar saltos de línea)</li>
+                                <li>Pulsa "Guardar"</li>
+                            </ul>
+
+                            <h3>Copiar entrenamiento anterior</h3>
+                            <p>Usa "📅 Copiar día actual de la semana pasada" para replicar el entrenamiento del mismo
+                                día
+                                de la semana anterior</p>
+
+                            <h3>Animaciones y transiciones</h3>
+                            <ul>
+                                <li>Las sesiones se expanden y colapsan con animaciones fluidas</li>
+                                <li>Los elementos aparecen con animaciones elegantes al cargar la vista</li>
+                                <li>Al completar sesiones o alcanzar hitos, verás animaciones de celebración con confeti
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div class="manual-section" id="estadisticas">
+                            <h2>📊 Estadísticas</h2>
+                            <h3>Ver tu progreso</h3>
+                            <ul>
+                                <li>Ve a la pestaña "Estadísticas"</li>
+                                <li>Selecciona la métrica que quieres analizar:
+                                    <ul>
+                                        <li>Volumen total</li>
+                                        <li>RIR promedio</li>
+                                        <li>Peso máximo</li>
+                                    </ul>
+                                </li>
+                                <li>Filtra por ejercicio específico o "Todos los ejercicios"</li>
+                                <li>Elige el período a analizar</li>
+                            </ul>
+
+                            <h3>Interpretar los datos</h3>
+                            <ul>
+                                <li><strong>Barras azules:</strong> Datos reales de cada semana</li>
+                                <li><strong>Línea verde:</strong> Tendencia/promedio</li>
+                                <li><strong>Tabla detallada:</strong> Estadísticas por ejercicio con porcentaje de
+                                    progreso
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div class="manual-section" id="perfil">
+                            <h2>👤 Perfil</h2>
+                            <h3>Información personal</h3>
+                            <ul>
+                                <li>Ve a la pestaña "Perfil"</li>
+                                <li>Completa tus datos:
+                                    <ul>
+                                        <li>Nombre y apellidos</li>
+                                        <li>Altura (cm)</li>
+                                        <li>Peso actual (kg)</li>
+                                        <li>% grasa corporal</li>
+                                    </ul>
+                                </li>
+                                <li>Pulsa "Actualizar perfil"</li>
+                            </ul>
+
+                            <h3>Medidas corporales</h3>
+                            <ul>
+                                <li>En la sección "Medidas Corporales" puedes registrar:
+                                    <ul>
+                                        <li>Brazos (cm)</li>
+                                        <li>Pecho (cm)</li>
+                                        <li>Cintura (cm)</li>
+                                        <li>Caderas (cm)</li>
+                                        <li>Piernas (cm)</li>
+                                        <li>Gemelos (cm)</li>
+                                    </ul>
+                                </li>
+                                <li>Puedes registrar todas las medidas o solo algunas</li>
+                                <li>Se guarda un historial con todas tus medidas por fecha</li>
+                                <li>Pulsa "Guardar medidas" para registrar</li>
+                            </ul>
+
+                            <h3>Foto de perfil</h3>
+                            <p>Pulsa "Seleccionar archivo" para subir tu foto</p>
+
+                            <h3>Personalizar colores</h3>
+                            <ul>
+                                <li>En la sección "Personalizar colores"</li>
+                                <li>Elige tu color preferido para:
+                                    <ul>
+                                        <li>Modo oscuro</li>
+                                        <li>Modo claro</li>
+                                    </ul>
+                                </li>
+                                <li>Haz clic en el color que te guste</li>
+                            </ul>
+
+                            <h3>Calculadora de TMB y Calorías</h3>
+                            <ul>
+                                <li>En la sección "Calculadora de TMB y Calorías" puedes calcular:
+                                    <ul>
+                                        <li><strong>TMB (Tasa Metabólica Basal):</strong> Las calorías que quemas en
+                                            reposo
+                                        </li>
+                                        <li><strong>TDEE (Gasto Energético Total):</strong> Calorías totales según tu
+                                            nivel
+                                            de actividad</li>
+                                        <li><strong>Calorías recomendadas:</strong> Según tu objetivo (mantener, perder
+                                            grasa o ganar masa)</li>
+                                    </ul>
+                                </li>
+                                <li>Selecciona tu sexo, edad y nivel de actividad</li>
+                                <li>Elige tu objetivo (mantener peso, perder grasa o ganar masa muscular)</li>
+                                <li>La calculadora usa automáticamente tu peso y altura del perfil</li>
+                                <li>Pulsa "Calcular" para ver los resultados</li>
+                            </ul>
+
+                            <h3>Notas rápidas</h3>
+                            <p>Añade notas personales de hasta 200 caracteres. Se guardan con fecha y hora.</p>
+                        </div>
+
+                        <div class="manual-section" id="rutinas">
+                            <h2>🧩 Rutinas</h2>
+                            <h3>Crear rutina personalizada</h3>
+                            <ul>
+                                <li>Ve a la pestaña "Crear"</li>
+                                <li>Ingresa un nombre para tu rutina</li>
+                                <li>Pulsa "+ Añadir día" para cada día de entrenamiento</li>
+                                <li>Para cada día:
+                                    <ul>
+                                        <li>Asigna un nombre (ej: "Día 1 - Pecho")</li>
+                                        <li>Añade ejercicios con "+ Ejercicio"</li>
+                                        <li>Configura sets para cada ejercicio</li>
+                                    </ul>
+                                </li>
+                                <li>Pulsa "Guardar rutina"</li>
+                            </ul>
+
+                            <h3>Usar plantillas predefinidas</h3>
+                            <p>En la misma sección, encontrarás rutinas predefinidas:</p>
+                            <ul>
+                                <li>3 días</li>
+                                <li>4 días</li>
+                                <li>5 días</li>
+                                <li>PPL 6 días</li>
+                            </ul>
+                            <p>Pulsa "Usar plantilla" para cargarla</p>
+                            <p><strong>Nota:</strong> Las rutinas que crees aparecerán antes que las plantillas
+                                predefinidas para facilitar el acceso.</p>
+                        </div>
+
+                        <div class="manual-section" id="objetivos">
+                            <h2>🎯 Objetivos</h2>
+                            <h3>Crear un objetivo</h3>
+                            <ul>
+                                <li>Ve a la pestaña "Objetivos"</li>
+                                <li>Pulsa "+ Nuevo Objetivo"</li>
+                                <li>Completa los datos:
+                                    <ul>
+                                        <li>Nombre del objetivo</li>
+                                        <li>Tipo de objetivo:
+                                            <ul>
+                                                <li><strong>Aumentar peso (kg):</strong> Para ejercicios específicos
+                                                </li>
+                                                <li><strong>Número de repeticiones:</strong> Establece un objetivo de
+                                                    repeticiones con un peso específico (requiere KG Objetivo y
+                                                    Repeticiones Objetivo)</li>
+                                                <li><strong>Perder peso (kg):</strong> Basado en tu peso del perfil</li>
+                                                <li><strong>Ganar peso (kg):</strong> Basado en tu peso del perfil</li>
+                                                <li><strong>Aumentar volumen total:</strong> Para aumentar el volumen
+                                                    total de entrenamiento</li>
+                                                <li><strong>Completar sesiones:</strong> Número de sesiones a completar
+                                                </li>
+                                                <li><strong>Racha de días:</strong> Días consecutivos entrenando</li>
+                                                <li><strong>Mejorar ejercicio específico:</strong> Progreso en un
+                                                    ejercicio concreto</li>
+                                            </ul>
+                                        </li>
+                                        <li>Meta numérica (para perder/ganar peso, es la cantidad a perder/ganar)</li>
+                                        <li>Para "Número de repeticiones": especifica el peso objetivo (KG) y las
+                                            repeticiones objetivo</li>
+                                        <li>Ejercicio específico (si aplica)</li>
+                                        <li>Fecha límite (opcional)</li>
+                                    </ul>
+                                </li>
+                                <li>Activa "Desglosar automáticamente en hitos" para crear metas intermedias</li>
+                                <li>Pulsa "Guardar"</li>
+                            </ul>
+
+                            <h3>Seguimiento de objetivos</h3>
+                            <ul>
+                                <li>Los objetivos muestran tu progreso actual</li>
+                                <li>Los hitos se marcan automáticamente al alcanzarlos</li>
+                                <li>Recibirás animaciones de celebración al completar objetivos o hitos</li>
+                                <li>Los hitos se muestran con formato claro:
+                                    <ul>
+                                        <li><strong>"X REPS":</strong> Para objetivos de número de repeticiones</li>
+                                        <li><strong>"X KG":</strong> Para objetivos de aumentar peso</li>
+                                    </ul>
+                                </li>
+                                <li>Los objetivos completados y los hitos completados tienen diferentes niveles de
+                                    transparencia para fácil identificación</li>
+                            </ul>
+                        </div>
+
+                        <div class="manual-section" id="importar">
+                            <h2>📥 Importar/Exportar</h2>
+                            <h3>Importar entrenamientos</h3>
+                            <ul>
+                                <li>Ve a la pestaña "Importar"</li>
+                                <li>Selecciona la semana objetivo</li>
+                                <li>Elige un archivo JSON válido</li>
+                                <li>Revisa la vista previa</li>
+                                <li>Pulsa "Importar"</li>
+                            </ul>
+
+                            <h3>Usar plantillas rápidas</h3>
+                            <p>Selecciona entre rutinas de 3, 4, 5 días o PPL. Se importarán automáticamente en la
+                                semana
+                                visible.</p>
+
+                            <h3>Exportar datos</h3>
+                            <p>Puedes exportar tus datos en formato JSON:</p>
+                            <ul>
+                                <li><strong>Exportar sesiones:</strong> Pulsa "Exportar sesiones" en la sección
+                                    "Importar
+                                    entrenamientos" para descargar todos tus entrenamientos registrados.</li>
+                                <li><strong>Exportar rutinas:</strong> En la sección "Rutinas creadas", pulsa "📤
+                                    Exportar
+                                    rutinas" para descargar todas tus rutinas personalizadas creadas.</li>
+                            </ul>
+                            <p>Los archivos exportados se descargarán con un nombre que incluye la fecha actual,
+                                facilitando
+                                su organización y respaldo.</p>
+                        </div>
+
+                        <div class="manual-section">
+                            <h2>💡 Consejos Útiles</h2>
+                            <h3>Récords Personales (PRs)</h3>
+                            <p>La aplicación detecta automáticamente tus récords. Verás una medalla 🏆 cuando superes
+                                tus
+                                marcas anteriores.</p>
+
+                            <h3>1RM (Repetición Máxima)</h3>
+                            <p>La aplicación calcula tu 1RM estimado basado en tus pesos y repeticiones. Se muestra
+                                junto a
+                                cada set completado.</p>
+
+                            <h3>Modo Competitivo</h3>
+                            <p>En tu perfil, encontrarás:</p>
+                            <ul>
+                                <li><strong>Racha actual:</strong> Días consecutivos entrenando</li>
+                                <li><strong>Meta semanal:</strong> Progreso hacia tu objetivo semanal</li>
+                                <li><strong>Logros desbloqueados:</strong> Reconocimientos por tus logros</li>
+                                <li><strong>Animaciones de celebración:</strong> Al completar sesiones o alcanzar hitos,
+                                    verás efectos visuales de confeti y animaciones de celebración</li>
+                            </ul>
+
+                            <h3>Atajos</h3>
+                            <ul>
+                                <li><strong>Doble clic:</strong> Edita rápidamente nombres de ejercicios</li>
+                                <li><strong>Tab:</strong> Navega entre campos de entrada</li>
+                                <li><strong>Escape:</strong> Cancela edición o cierra diálogos</li>
+                            </ul>
+
+                            <h3>Mejoras visuales en móvil</h3>
+                            <ul>
+                                <li>Feedback táctil mejorado: los botones responden visualmente al tocarlos</li>
+                                <li>Transiciones fluidas entre pantallas y secciones</li>
+                                <li>Animaciones elegantes al aparecer elementos (efecto "Diagonal")</li>
+                                <li>Botones con transparencia elegante manteniendo el texto completamente legible</li>
+                            </ul>
+                        </div>
+
+                        <div class="manual-section">
+                            <h2>❓ Preguntas Frecuentes</h2>
+                            <h3>¿Se guardan automáticamente mis datos?</h3>
+                            <p>Sí, todos tus cambios se guardan localmente en tu navegador.</p>
+
+                            <h3>¿Puedo usar la aplicación sin conexión a internet?</h3>
+                            <p>Sí, una vez cargada, la aplicación funciona completamente offline.</p>
+
+                            <h3>¿Puedo exportar mis datos?</h3>
+                            <p>Sí, usa la función "Exportar sesiones" en la pestaña Importar.</p>
+
+                            <h3>¿Cómo puedo editar un ejercicio ya creado?</h3>
+                            <p>Haz clic directamente sobre el nombre del ejercicio para editarlo. Aparecerán botones de
+                                guardar/cancelar para confirmar el cambio.</p>
+
+                            <h3>¿Puedo eliminar ejercicios?</h3>
+                            <p>Sí, puedes eliminar ejercicios en cualquier momento usando el botón ✕ junto al nombre del
+                                ejercicio. Aparecerá un diálogo de confirmación.</p>
+
+                            <h3>¿Cómo funcionan las estadísticas de progreso?</h3>
+                            <p>Las estadísticas comparan el período actual con el período anterior del mismo tamaño. Si
+                                no
+                                hay datos del período anterior, se compara con el primer registro de ese ejercicio para
+                                calcular el progreso.</p>
+                        </div>
+
+                        <div class="manual-section">
+                            <h2>🎉 ¡Listo para entrenar!</h2>
+                            <p>Ahora que conoces todas las funcionalidades de TrainTracker, estás listo para registrar
+                                tus
+                                entrenamientos y alcanzar tus metas.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal__actions">
+                    <button class="btn" value="cancel">Cerrar</button>
+                </div>
+            </form>
+        </dialog>
+
+        <dialog id="goalDialog" aria-labelledby="goalTitle" aria-modal="true">
+            <form method="dialog">
+                <div class="modal__head">
+                    <h3 class="modal__title" id="goalTitle">Nuevo Objetivo</h3>
+                    <button class="theme-btn" value="cancel" aria-label="Cerrar">Cerrar</button>
+                </div>
+                <div class="modal__body">
+                    <div class="field">
+                        <label class="label" for="goalName">Nombre del objetivo</label>
+                        <input id="goalName" class="input" placeholder="Ej. Aumentar press banca a 100kg" />
+                    </div>
+                    <div class="field">
+                        <label class="label" for="goalType">Tipo de objetivo</label>
+                        <select id="goalType" class="input">
+                            <option value="weight">Aumentar peso (kg)</option>
+                            <option value="loseWeight">Perder peso (kg)</option>
+                            <option value="gainWeight">Ganar peso (kg)</option>
+                            <option value="volume">Aumentar volumen total</option>
+                            <option value="repsWeight">Número de repeticiones</option>
+                            <option value="sessions">Completar sesiones</option>
+                            <option value="streak">Racha de días</option>
+                            <option value="exercise">Mejorar ejercicio específico</option>
+                        </select>
+                    </div>
+                    <div class="field" id="goalTargetField">
+                        <label class="label" id="goalTargetLabel" for="goalTarget">Meta objetivo</label>
+                        <input id="goalTarget" class="input" type="number" placeholder="Ej. 100" />
+                    </div>
+                    <div class="field" id="goalRepsTargetField" style="display:none">
+                        <label class="label" for="goalRepsTarget">Repeticiones Objetivo</label>
+                        <input id="goalRepsTarget" class="input" type="number" placeholder="Ej. 10" />
+                    </div>
+                    <div class="field" id="goalExerciseField" style="display:none">
+                        <label class="label" for="goalExercise">Ejercicio específico</label>
+                        <input id="goalExercise" class="input" placeholder="Ej. Press banca" />
+                    </div>
+                    <div class="field">
+                        <label class="label" for="goalDeadline">Fecha límite (opcional)</label>
+                        <input id="goalDeadline" class="input" type="date" />
+                    </div>
+                    <div class="field">
+                        <label class="label">
+                            <input type="checkbox" id="goalAutoMilestones" checked />
+                            Desglosar automáticamente en hitos
+                        </label>
+                    </div>
+                </div>
+                <div class="modal__actions">
+                    <button class="btn btn--ghost" value="cancel">Cancelar</button>
+                    <button class="btn" id="saveGoal" value="default">Guardar</button>
+                </div>
+            </form>
+        </dialog>
+
+        <dialog id="confirmDialog" class="confirm-dialog" aria-labelledby="confirmTitle" aria-modal="true">
+            <form method="dialog">
+                <div class="modal__head">
+                    <h3 class="modal__title" id="confirmTitle">Confirmar eliminación</h3>
+                    <button class="theme-btn" value="cancel" aria-label="Cerrar">Cerrar</button>
+                </div>
+                <div class="modal__body">
+                    <p class="confirm-message" id="confirmMessage">¿Estás seguro de que quieres eliminar este elemento?
+                    </p>
+                </div>
+                <div class="modal__actions">
+                    <button class="btn btn--ghost" value="cancel">Cancelar</button>
+                    <button class="btn" id="confirmDelete" value="default">Eliminar</button>
+                </div>
+            </form>
+        </dialog>
+
+        <dialog id="templateDialog" aria-labelledby="templateTitle" aria-modal="true">
+            <form method="dialog">
+                <div class="modal__head">
+                    <h3 class="modal__title" id="templateTitle">Vista previa de plantilla</h3>
+                    <button class="theme-btn" value="cancel" aria-label="Cerrar">Cerrar</button>
+                </div>
+                <div class="modal__body">
+                    <div id="templatePreview" style="display:grid; gap:8px"></div>
+                    <small style="color:var(--muted)">Se importará en la <strong>semana visible</strong> (pestaña
+                        TrainTracker).</small>
+                </div>
+                <div class="modal__actions">
+                    <button class="btn btn--ghost" value="cancel">Cancelar</button>
+                    <button class="btn btn--secondary" id="confirmTemplate">Importar en esta semana</button>
+                </div>
+            </form>
+        </dialog>
+
+        <dialog id="restTimerDialog" aria-labelledby="restTimerTitle" aria-modal="true">
+            <form method="dialog">
+                <div class="modal__head">
+                    <h3 class="modal__title" id="restTimerTitle">Temporizador de descanso</h3>
+                    <button class="theme-btn" value="cancel" aria-label="Cerrar">Cerrar</button>
+                </div>
+                <div class="modal__body">
+                    <div class="timer-selection" id="timerSelection">
+                        <p style="text-align:center; margin-bottom:16px; color:var(--muted)">Selecciona el tiempo de
+                            descanso:</p>
+                        <div class="timer-buttons">
+                            <button type="button" class="btn btn--ghost timer-btn" data-minutes="1">1 min</button>
+                            <button type="button" class="btn btn--ghost timer-btn" data-minutes="2">2 min</button>
+                            <button type="button" class="btn btn--ghost timer-btn" data-minutes="3">3 min</button>
+                            <button type="button" class="btn btn--ghost timer-btn" data-minutes="4">4 min</button>
+                        </div>
+                    </div>
+                    <div class="timer-running" id="timerRunning" style="display:none">
+                        <div class="timer-display">
+                            <div class="timer-time" id="timerTime">00:00</div>
+                            <div class="timer-label">Tiempo restante</div>
+                        </div>
+                    </div>
+                    <div class="timer-completed" id="timerCompleted" style="display:none">
+                        <div class="timer-completed-content">
+                            <div class="timer-checkmark">✓</div>
+                            <div class="timer-completed-message">Descanso finalizado</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal__actions">
+                    <button class="btn btn--ghost" value="cancel" id="timerCancel"
+                        style="display:none">Cancelar</button>
+                </div>
+            </form>
+        </dialog>
+
+        <dialog id="friendStatsDialog" aria-labelledby="friendStatsTitle" aria-modal="true"
+            style="max-width:900px; width:95%">
+            <form method="dialog">
+                <div class="modal__head">
+                    <h3 class="modal__title" id="friendStatsTitle">Estadísticas de Amigo</h3>
+                    <button class="theme-btn" value="cancel" aria-label="Cerrar">Cerrar</button>
+                </div>
+                <div class="modal__body">
+                    <div id="friendProfileHeader"
+                        style="display:flex; align-items:center; gap:12px; margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid var(--border)">
+                        <img id="friendAvatar" class="profile-avatar" style="width:50px; height:50px" alt="Avatar"
+                            src="" />
+                        <div>
+                            <div id="friendName" style="font-weight:700; font-size:1.1rem; color:var(--heading)">Nombre
+                            </div>
+                            <div id="friendLastActive" style="color:var(--muted); font-size:0.85rem">Última actividad: -
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="summary__grid" style="margin-bottom:20px">
+                        <div class="kpi">
+                            <div class="kpi__label">Sesiones (Mes)</div>
+                            <div class="kpi__value" id="friendSessions">-</div>
+                        </div>
+                        <div class="kpi">
+                            <div class="kpi__label">Volumen (Mes)</div>
+                            <div class="kpi__value" id="friendVolume">-</div>
+                        </div>
+                        <div class="kpi">
+                            <div class="kpi__label">Racha actual</div>
+                            <div class="kpi__value" id="friendStreak">-</div>
+                        </div>
+                    </div>
+
+                    <h4 class="summary__title">Últimos entrenamientos</h4>
+                    <div id="friendRecentSessions" class="routine-import__list"
+                        style="max-height:300px; overflow-y:auto">
+                        <div class="routine-empty">Cargando...</div>
+                    </div>
+
+                    <h4 class="summary__title" style="margin-top:24px">🎯 Objetivos</h4>
+                    <div id="friendGoalsList" class="goals-list" style="margin-top:12px">
+                        <div class="routine-empty">Cargando...</div>
+                    </div>
+
+                    <h4 class="summary__title" style="margin-top:24px">🏆 Logros</h4>
+                    <div id="friendAchievementsList" class="achievements-all" style="margin-top:12px">
+                        <div class="routine-empty">Cargando...</div>
+                    </div>
+                </div>
+                <div class="modal__actions">
+                    <button class="btn" value="cancel">Cerrar</button>
+                </div>
+            </form>
+        </dialog>
+
+        <!-- Templates -->
+        <template id="tpl-session">
+            <article class="session card pop" data-id="">
+                <div class="session__header">
+                    <div class="session__titlewrap">
+                        <div class="session__title"></div>
+                        <div class="session__date"></div>
+                        <div class="session__changes-indicator" style="display:none">
+                            <span>⚠️</span>
+                            <span>Cambios sin guardar</span>
+                        </div>
+                    </div>
+                    <div class="session__tools">
+                        <button class="btn btn--mobile btn--ghost js-complete" title="Marcar como completada"
+                            aria-pressed="false" aria-label="Marcar como completada">✓</button>
+                        <button class="btn btn--mobile btn--ghost js-edit-session"
+                            title="Editar nombre y fecha de la sesión"
+                            aria-label="Editar nombre y fecha de la sesión">✏️</button>
+                        <button class="btn btn--mobile btn--ghost js-add-ex" title="Añadir ejercicio"
+                            aria-label="Añadir ejercicio">+
+                            Ejercicio</button>
+                        <button class="btn btn--mobile btn--ghost js-delete" title="Eliminar sesión"
+                            aria-label="Eliminar sesión">✕</button>
+                    </div>
+                    <div class="session__edit-controls" style="display:none">
+                        <button class="btn btn--small js-save-session">💾 Guardar cambios</button>
+                        <button class="btn btn--small btn--ghost js-cancel-session">✕ Cancelar</button>
+                    </div>
+                </div>
+                <div class="session__body"></div>
+            </article>
+        </template>
+
+        <template id="tpl-exercise">
+            <section class="exercise" data-ex-id="">
+                <div class="exercise__head">
+                    <div class="exercise__name"></div>
+                    <div>
+                        <button class="btn btn--small btn--ghost js-add-set">+ Set</button>
+                        <button class="btn btn--small btn--ghost js-del-ex"
+                            style="border:1px solid var(--border)">✕</button>
+                    </div>
+                </div>
+                <!-- Mobile cards container -->
+                <div class="sets-container"></div>
+                <!-- Desktop table container -->
+                <div class="table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Set</th>
+                                <th>KG</th>
+                                <th>Reps</th>
+                                <th>RIR</th>
+                                <th>Progreso</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody class="sets"></tbody>
+                    </table>
+                </div>
+            </section>
+        </template>
+
+        <template id="tpl-set">
+            <tr data-set-id="">
+                <td class="set-num"></td>
+                <td style="position:relative">
+                    <input class="input js-kg" inputmode="decimal" aria-label="Kilogramos" />
+                    <div class="prev-week-data prev-week-kg" style="display:none"></div>
+                </td>
+                <td style="position:relative">
+                    <input class="input js-reps" inputmode="numeric" aria-label="Repeticiones"
+                        placeholder="6, 6+1 o 6-8" />
+                    <div class="prev-week-data prev-week-reps" style="display:none"></div>
+                </td>
+                <td style="position:relative">
+                    <input class="input js-rir" inputmode="decimal" aria-label="RIR" placeholder="1 o 1/0" />
+                    <div class="prev-week-data prev-week-rir" style="display:none"></div>
+                </td>
+                <td class="progress">Primera sesión</td>
+                <td>
+                    <button class="btn btn--ghost btn--timer js-rest-timer" aria-label="Temporizador de descanso"
+                        title="Temporizador de descanso">⏳</button>
+                    <button class="btn btn--ghost btn--prev-week js-prev-week-data"
+                        aria-label="Ver datos de la semana pasada" title="Ver datos de la semana pasada">👁️</button>
+                    <button class="btn btn--ghost js-del-set" aria-label="Eliminar set">✕</button>
+                </td>
+            </tr>
+        </template>
+
+        <!-- Mobile set card template -->
+        <template id="tpl-set-card">
+            <div class="set-card" data-set-id="">
+                <div class="set-header">
+                    <div class="set-number">Set 1</div>
+                    <div class="set-header-actions">
+                        <button class="btn btn--ghost btn--timer btn--small js-rest-timer"
+                            aria-label="Temporizador de descanso" title="Temporizador de descanso">⏳</button>
+                        <button class="btn btn--ghost btn--prev-week btn--small js-prev-week-data"
+                            aria-label="Ver datos de la semana pasada"
+                            title="Ver datos de la semana pasada">👁️</button>
+                        <button class="set-delete js-del-set" aria-label="Eliminar set">✕</button>
+                    </div>
+                </div>
+                <div class="set-inputs">
+                    <div class="set-input-group" style="position:relative">
+                        <label class="set-input-label">KG</label>
+                        <input class="set-input js-kg" inputmode="decimal" aria-label="Kilogramos" placeholder="0" />
+                        <div class="prev-week-data prev-week-kg" style="display:none"></div>
+                    </div>
+                    <div class="set-input-group" style="position:relative">
+                        <label class="set-input-label">Reps</label>
+                        <input class="set-input js-reps" inputmode="numeric" aria-label="Repeticiones"
+                            placeholder="0" />
+                        <div class="prev-week-data prev-week-reps" style="display:none"></div>
+                    </div>
+                    <div class="set-input-group" style="position:relative">
+                        <label class="set-input-label">RIR</label>
+                        <input class="set-input js-rir" inputmode="decimal" aria-label="RIR" placeholder="0" />
+                        <div class="prev-week-data prev-week-rir" style="display:none"></div>
+                    </div>
+                </div>
+                <div class="set-progress">Primera sesión</div>
+            </div>
+        </template>
+
+        <template id="tpl-routine-day">
+            <div class="routine-day" data-day-id="">
+                <div class="routine-day__head">
+                    <div class="routine-day__title">Día</div>
+                    <input class="input routine-day__name" placeholder="Nombre del día (ej. Pecho/Espalda)" />
+                    <div>
+                        <button class="btn btn--small btn--ghost js-add-routine-exercise">+ Ejercicio</button>
+                        <button class="btn btn--small btn--ghost js-delete-routine-day"
+                            aria-label="Eliminar día">✕</button>
+                    </div>
+                </div>
+                <div class="routine-exercises"></div>
+            </div>
+        </template>
+
+        <template id="tpl-routine-exercise">
+            <div class="routine-exercise" data-ex-id="">
+                <div class="routine-exercise__head">
+                    <input class="input routine-exercise__name" placeholder="Nombre del ejercicio" />
+                    <div>
+                        <button class="btn btn--small btn--ghost js-add-routine-set">+ Set</button>
+                        <button class="btn btn--small btn--ghost js-delete-routine-exercise"
+                            aria-label="Eliminar ejercicio">✕</button>
+                    </div>
+                </div>
+                <div class="routine-sets"></div>
+            </div>
+        </template>
+
+        <template id="tpl-routine-set">
+            <div class="routine-set" data-set-id="">
+                <span class="routine-set__index">Set</span>
+                <input class="input routine-set__kg" inputmode="decimal" placeholder="KG" aria-label="Kilogramos" />
+                <input class="input routine-set__reps" inputmode="numeric" placeholder="Reps"
+                    aria-label="Repeticiones" />
+                <input class="input routine-set__rir" inputmode="decimal" placeholder="RIR" aria-label="RIR" />
+                <button class="btn btn--small btn--ghost js-delete-routine-set" aria-label="Eliminar set">✕</button>
+            </div>
+        </template>
+
+        <!-- TOASTS -->
+        <div class="toasts" id="toasts" aria-live="polite" aria-atomic="true"></div>
+
+        </main>
+    </div>
+
+    <!-- Supabase JS Library -->
+    <script type="module">
+        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+        // Make createClient available globally
+        window.supabaseCreateClient = createClient;
+        // Dispatch event to notify that library is ready
+        window.dispatchEvent(new Event('supabaseReady'));
+        console.log('Supabase library loaded via ES module');
+    </script>
+    <!-- Supabase Configuration -->
+    <script src="supabase-config.js"></script>
+    <!-- Supabase Service -->
+    <script src="supabase-service.js"></script>
+    <!-- Main Application -->
+    <script src="TrainTracker.js"></script>
+
+</body>
+
+</html>
