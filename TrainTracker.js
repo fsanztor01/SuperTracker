@@ -776,6 +776,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /* =================== Persistencia =================== */
+    // Save data ONLY to Supabase - requires authentication
     async function save() {
         const payload = {
             sessions: app.sessions,
@@ -793,56 +794,74 @@ document.addEventListener('DOMContentLoaded', () => {
             recentAchievements: app.recentAchievements || []
         };
 
-        // Try to save to Supabase if available, otherwise fallback to localStorage
+        // Save ONLY to Supabase - requires authentication
         if (typeof supabaseService !== 'undefined') {
             const isAvailable = await supabaseService.isAvailable();
             if (isAvailable) {
                 try {
                     await supabaseService.saveUserData(payload);
+                    // Success - data saved to Supabase
                 } catch (error) {
-                    console.warn('Supabase save failed, using localStorage:', error);
-                    // Fallback to localStorage
-                    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+                    console.error('Error guardando en Supabase:', error);
+                    const errorMessage = error.message || 'Error al guardar los datos';
+                    toast(errorMessage, 'err');
+                    throw error; // Re-throw to let caller handle it
                 }
             } else {
-                // Use localStorage as fallback
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+                const errorMsg = 'Supabase no está disponible. Debes iniciar sesión para guardar datos.';
+                console.error(errorMsg);
+                toast(errorMsg, 'err');
+                throw new Error(errorMsg);
             }
         } else {
-            // Use localStorage as fallback
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+            const errorMsg = 'Supabase no está configurado. No se pueden guardar los datos.';
+            console.error(errorMsg);
+            toast(errorMsg, 'err');
+            throw new Error(errorMsg);
         }
     }
 
+    // Load data ONLY from Supabase - requires authentication
     async function load() {
         let parsed = null;
 
-        // Try to load from Supabase if available
+        // Load ONLY from Supabase - requires authentication
         if (typeof supabaseService !== 'undefined') {
             const isAvailable = await supabaseService.isAvailable();
             if (isAvailable) {
                 try {
                     parsed = await supabaseService.loadUserData();
                 } catch (error) {
-                    console.warn('Supabase load failed, using localStorage:', error);
-                }
-            }
-        }
-
-        // If Supabase didn't return data, try localStorage
-        if (!parsed) {
-            try {
-                const raw = localStorage.getItem(STORAGE_KEY);
-                if (!raw) {
+                    console.error('Error cargando desde Supabase:', error);
+                    // If user is not authenticated, show message and initialize default data
+                    if (error.message && error.message.includes('no autenticado')) {
+                        console.log('Usuario no autenticado, inicializando datos por defecto');
+                        initializeDefaultData();
+                        return;
+                    }
+                    // For other errors, show message but still initialize default data
+                    toast('Error al cargar datos desde la base de datos', 'err');
                     initializeDefaultData();
                     return;
                 }
-                parsed = JSON.parse(raw);
-            } catch (error) {
-                console.error('Error loading from localStorage:', error);
+            } else {
+                // Supabase not available - initialize default data
+                console.log('Supabase no disponible, inicializando datos por defecto');
                 initializeDefaultData();
                 return;
             }
+        } else {
+            // Supabase service not defined - initialize default data
+            console.log('Servicio Supabase no definido, inicializando datos por defecto');
+            initializeDefaultData();
+            return;
+        }
+
+        // If no data from Supabase (new user), initialize default data
+        if (!parsed) {
+            console.log('No hay datos en Supabase, inicializando datos por defecto');
+            initializeDefaultData();
+            return;
         }
 
         // Parse and load data
@@ -3882,41 +3901,35 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            if (baseValue > 0) {
+            // Only calculate progress if we have valid comparison data
+            if (baseValue > 0 && currentValue > 0) {
                 const diff = ((currentValue - baseValue) / baseValue * 100);
-                // If difference is very small (less than 0.1%), treat as same
+                
+                // If difference is very small (less than 0.1%), treat as same (no change)
                 if (Math.abs(diff) < 0.1) {
-                    // Check if we have multiple weeks of data
-                    const weeksWithData = Array.from(new Set(
-                        [...app.sessions]
-                            .filter(s => {
-                                const ex = (s.exercises || []).find(e => e.name === exerciseName);
-                                return ex && ex.sets && ex.sets.length > 0;
-                            })
-                            .map(s => {
-                                const d = parseLocalDate(s.date);
-                                return startOfWeek(d).toISOString().split('T')[0];
-                            })
-                    ));
-
-                    if (weeksWithData.length <= 1) {
-                        // All data in one week - show as first record
-                        progressText = 'Primer registro';
-                        progressClass = 'progress--up';
-                    } else {
-                        progressText = '0%';
-                        progressClass = 'progress--same';
-                    }
+                    progressText = 'Sin cambio';
+                    progressClass = 'progress--same';
                 } else if (diff > 0) {
+                    // Positive progress - green
                     progressText = `+${diff.toFixed(1)}%`;
                     progressClass = 'progress--up';
                 } else {
+                    // Negative progress - red
                     progressText = `${diff.toFixed(1)}%`;
                     progressClass = 'progress--down';
                 }
-            } else if (currentValue > 0) {
+            } else if (currentValue > 0 && baseValue === 0) {
+                // We have current data but no comparison - show as first record
                 progressText = 'Primer registro';
                 progressClass = 'progress--up';
+            } else if (currentValue === 0 && baseValue === 0) {
+                // No data at all
+                progressText = 'Sin datos';
+                progressClass = 'progress--same';
+            } else if (currentValue === 0 && baseValue > 0) {
+                // Had data before but not now - red (negative)
+                progressText = '-100%';
+                progressClass = 'progress--down';
             }
 
             return `
@@ -4560,17 +4573,58 @@ document.addEventListener('DOMContentLoaded', () => {
         const monday = startOfWeek(addDays(new Date(), offset * 7));
         monday.setHours(0, 0, 0, 0);
 
-        // Corrige desplazamiento del primer día (Día 1 = lunes)
+        // Get existing session dates to avoid duplicates
+        const existingDates = new Set(
+            app.sessions.map(s => toLocalISO(parseLocalDate(s.date)))
+        );
+
+        // Map sessions: use real dates from JSON if available, otherwise use sequential dates
         const mapped = app.importBuffer.map((s, idx) => {
-            const sessionDate = new Date(monday);
-            sessionDate.setDate(monday.getDate() + idx); // día consecutivo
-            sessionDate.setHours(12, 0, 0, 0); // forzamos mediodía local para evitar redondeos tz
-            const dateISO = toLocalISO(sessionDate);
+            let dateISO;
+            
+            // Try to use the date from the JSON if it exists and is valid
+            if (s.date && typeof s.date === 'string') {
+                try {
+                    const parsedDate = parseLocalDate(s.date);
+                    // Check if date is valid
+                    if (!isNaN(parsedDate.getTime())) {
+                        dateISO = toLocalISO(parsedDate);
+                    } else {
+                        // Invalid date, use sequential fallback
+                        const sessionDate = new Date(monday);
+                        sessionDate.setDate(monday.getDate() + idx);
+                        sessionDate.setHours(12, 0, 0, 0);
+                        dateISO = toLocalISO(sessionDate);
+                    }
+                } catch (e) {
+                    // Error parsing date, use sequential fallback
+                    const sessionDate = new Date(monday);
+                    sessionDate.setDate(monday.getDate() + idx);
+                    sessionDate.setHours(12, 0, 0, 0);
+                    dateISO = toLocalISO(sessionDate);
+                }
+            } else {
+                // No date in JSON, use sequential fallback
+                const sessionDate = new Date(monday);
+                sessionDate.setDate(monday.getDate() + idx);
+                sessionDate.setHours(12, 0, 0, 0);
+                dateISO = toLocalISO(sessionDate);
+            }
+            
             return normalizeSessionFromImport(s, dateISO);
         });
 
+        // Filter out sessions that would duplicate existing dates (optional: you can remove this if you want to allow duplicates)
+        const newSessions = mapped.filter(s => !existingDates.has(s.date));
+
+        // Show warning if some sessions were skipped due to duplicate dates
+        if (mapped.length > newSessions.length) {
+            const skipped = mapped.length - newSessions.length;
+            toast(`Se importaron ${newSessions.length} sesiones. ${skipped} sesión(es) se omitieron porque ya existen en esas fechas.`, 'warning');
+        }
+
         // Inserta las sesiones
-        app.sessions = [...app.sessions, ...mapped];
+        app.sessions = [...app.sessions, ...newSessions];
         save();
 
         // Always refresh to update UI (renderSessions will check if we're viewing the imported week)
@@ -4583,7 +4637,9 @@ document.addEventListener('DOMContentLoaded', () => {
         $('#importAlert').classList.add('hidden');
 
         // Mensaje visual
-        toast('Entrenamiento importado correctamente ✔️', 'ok');
+        if (newSessions.length > 0) {
+            toast('Entrenamiento importado correctamente ✔️', 'ok');
+        }
     }
 
     function exportSessions() {
@@ -5883,6 +5939,11 @@ document.addEventListener('DOMContentLoaded', () => {
             updateStreak();
             updateWeeklyGoal();
             checkAchievements();
+            
+            // Sync profile to Supabase after loading
+            if (app.profile) {
+                syncProfileToSupabase(app.profile.firstName, app.profile.lastName);
+            }
         } else {
             // Just bind events for auth screen
             // Don't load app data until authenticated
@@ -5915,6 +5976,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (removeBtn) {
                 removeBtn.style.display = 'block';
             }
+
+            // Sync profile to Supabase
+            syncProfileToSupabase(app.profile.firstName, app.profile.lastName);
 
             toast('Foto de perfil actualizada', 'ok');
         };
@@ -6025,7 +6089,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
         save();
         renderProfile();
+        
+        // Sync profile to Supabase profiles table
+        syncProfileToSupabase(firstName, lastName);
+        
         toast('Perfil actualizado', 'ok');
+    }
+    
+    // Function to sync profile data to Supabase profiles table
+    async function syncProfileToSupabase(firstName, lastName) {
+        if (!supabase) return;
+        
+        try {
+            const user = await supabaseService.getCurrentUser();
+            if (!user) return;
+            
+            // Get avatar URL if exists
+            const avatarUrl = app.profile.photo || null;
+            
+            // Update or insert profile in Supabase
+            const { error } = await supabase
+                .from('profiles')
+                .upsert({
+                    id: user.id,
+                    email: user.email,
+                    first_name: firstName || null,
+                    last_name: lastName || null,
+                    avatar_url: avatarUrl
+                }, {
+                    onConflict: 'id'
+                });
+            
+            if (error) {
+                console.error('Error syncing profile to Supabase:', error);
+            }
+        } catch (error) {
+            console.error('Error in syncProfileToSupabase:', error);
+        }
     }
 
     /* =================== Notes Handlers =================== */
@@ -6339,23 +6439,42 @@ document.addEventListener('DOMContentLoaded', () => {
         const reqList = $('#pendingRequestsList');
         reqList.innerHTML = '';
         if (requests && requests.length > 0) {
-            requests.forEach(req => {
+            // Fetch sender's user_data to get their profile name
+            for (const req of requests) {
+                const { data: senderData } = await supabase
+                    .from('user_data')
+                    .select('data')
+                    .eq('user_id', req.sender_id)
+                    .maybeSingle();
+                
+                const senderUserData = senderData?.data || {};
+                const senderProfile = senderUserData.profile || {};
+                
+                // Get name from user_data profile (same as Perfil>Nombre) or from profiles table
+                const firstName = senderProfile.firstName || req.sender.first_name || '';
+                const lastName = senderProfile.lastName || req.sender.last_name || '';
+                const fullName = (firstName + ' ' + lastName).trim();
+                
                 const div = document.createElement('div');
                 div.className = 'routine-created__item';
+                
                 div.innerHTML = `
-                    <div style="display:flex; justify-content:space-between; align-items:center">
-                        <div style="display:flex; align-items:center; gap:10px">
-                            <img src="${req.sender.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${req.sender.email}`}" style="width:40px; height:40px; border-radius:50%">
-                            <div>
-                                <div style="font-weight:600">${req.sender.first_name} ${req.sender.last_name}</div>
-                                <div style="font-size:0.8rem; color:var(--muted)">${req.sender.email}</div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap">
+                        <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:0">
+                            <img src="${req.sender.avatar_url || senderProfile.photo || `https://api.dicebear.com/7.x/avataaars/svg?seed=${req.sender.email}`}" style="width:40px; height:40px; border-radius:50%; flex-shrink:0">
+                            <div style="min-width:0; flex:1">
+                                <div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">${fullName || req.sender.email || 'Usuario'}</div>
+                                <div style="font-size:0.8rem; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis">${req.sender.email}</div>
                             </div>
                         </div>
-                        <button class="btn btn--small js-accept-request" data-id="${req.id}">Aceptar</button>
+                        <div style="display:flex; gap:8px; flex-shrink:0">
+                            <button class="btn btn--small btn--danger js-decline-request" data-id="${req.id}" aria-label="Rechazar" style="min-width:44px; padding:8px 12px; font-size:1.2rem; line-height:1">✕</button>
+                            <button class="btn btn--small js-accept-request" data-id="${req.id}" aria-label="Aceptar" style="min-width:44px; padding:8px 12px; font-size:1.2rem; line-height:1; background:linear-gradient(135deg, #10b981, #059669); color:#ffffff; border:0; box-shadow:0 2px 8px rgba(16, 185, 129, 0.3)">✓</button>
+                        </div>
                     </div>
                 `;
                 reqList.appendChild(div);
-            });
+            }
         } else {
             reqList.innerHTML = '<div class="routine-empty">No tienes solicitudes pendientes.</div>';
         }
@@ -6379,22 +6498,50 @@ document.addEventListener('DOMContentLoaded', () => {
         const friendsList = $('#friendsList');
         friendsList.innerHTML = '';
         if (allFriends.length > 0) {
-            allFriends.forEach(f => {
+            // Load user_data for each friend to get their current profile photo
+            for (const f of allFriends) {
+                // Fetch friend's user_data to get current profile photo
+                const { data: friendData } = await supabase
+                    .from('user_data')
+                    .select('data')
+                    .eq('user_id', f.id)
+                    .maybeSingle();
+                
+                const friendUserData = friendData?.data || {};
+                const friendProfile = friendUserData.profile || {};
+                
+                // Get name from user_data profile (same as Perfil>Nombre) or from profiles table
+                const firstName = friendProfile.firstName || f.first_name || '';
+                const lastName = friendProfile.lastName || f.last_name || '';
+                const fullName = (firstName + ' ' + lastName).trim() || f.email || 'Usuario';
+                
+                // Get photo from profile first, then avatar_url, then generate
+                const friendPhoto = friendProfile.photo || f.avatar_url || null;
+                let avatarSrc;
+                if (friendPhoto) {
+                    avatarSrc = friendPhoto;
+                } else {
+                    // Generate avatar from email or name
+                    const avatarSeed = friendProfile.avatarSeed || f.email || fullName;
+                    avatarSrc = `https://api.dicebear.com/7.x/${friendProfile.avatarStyle || 'avataaars'}/svg?seed=${encodeURIComponent(avatarSeed)}`;
+                }
+                
                 const div = document.createElement('div');
                 div.className = 'routine-created__item';
                 div.style.cursor = 'pointer';
                 div.onclick = () => viewFriendStats(f.id);
+                
                 div.innerHTML = `
                     <div style="display:flex; align-items:center; gap:12px">
-                        <img src="${f.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${f.email}`}" style="width:40px; height:40px; border-radius:50%">
+                        <img src="${avatarSrc}" style="width:40px; height:40px; border-radius:50%">
                         <div>
-                            <div style="font-weight:600">${f.first_name} ${f.last_name}</div>
+                            <div style="font-weight:600">${fullName}</div>
                             <div style="font-size:0.8rem; color:var(--muted)">Ver estadísticas</div>
                         </div>
                     </div>
                 `;
                 friendsList.appendChild(div);
-            });
+            }
         } else {
             friendsList.innerHTML = '<div class="routine-empty">Aún no tienes amigos conectados.</div>';
         }
@@ -6456,11 +6603,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Update friend profile header
-        $('#friendName').textContent = `${friend.first_name} ${friend.last_name}`;
-        $('#friendAvatar').src = friend.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${friend.email}`;
-        $('#friendLastActive').textContent = `Miembro desde ${new Date(friend.updated_at || Date.now()).toLocaleDateString()}`;
-
         // Fetch friend's user_data to get goals, achievements, sessions, etc.
         const { data: friendData } = await supabase
             .from('user_data')
@@ -6469,6 +6611,25 @@ document.addEventListener('DOMContentLoaded', () => {
             .maybeSingle();
 
         const friendUserData = friendData?.data || {};
+        
+        // Get friend's name from user_data profile (same as in Perfil>Nombre) or from profiles table
+        const friendProfileName = friendUserData.profile || {};
+        const friendFirstName = friendProfileName.firstName || friend.first_name || '';
+        const friendLastName = friendProfileName.lastName || friend.last_name || '';
+        const friendFullName = (friendFirstName + ' ' + friendLastName).trim() || friend.email || 'Usuario';
+
+        // Update friend profile header
+        $('#friendName').textContent = friendFullName;
+        // Use photo from profile first, then avatar_url, then generate from email
+        const friendPhoto = friendProfileName.photo || friend.avatar_url || null;
+        if (friendPhoto) {
+            $('#friendAvatar').src = friendPhoto;
+        } else {
+            // Generate avatar from email or name
+            const avatarSeed = friendProfileName.avatarSeed || friend.email || friendFullName;
+            $('#friendAvatar').src = `https://api.dicebear.com/7.x/${friendProfileName.avatarStyle || 'avataaars'}/svg?seed=${encodeURIComponent(avatarSeed)}`;
+        }
+        $('#friendLastActive').textContent = `Miembro desde ${new Date(friend.updated_at || Date.now()).toLocaleDateString()}`;
 
         // Calculate stats from friend's sessions
         const friendSessions = friendUserData.sessions || [];
@@ -6610,7 +6771,192 @@ document.addEventListener('DOMContentLoaded', () => {
             }).join('');
         }
 
+        // Display friend's routines with copy option
+        const friendRoutines = friendUserData.routines || [];
+        const routinesContainer = $('#friendRoutinesList');
+        if (routinesContainer) {
+            if (friendRoutines.length === 0) {
+                routinesContainer.innerHTML = '<div class="routine-empty">Aún no tiene rutinas creadas.</div>';
+            } else {
+                routinesContainer.innerHTML = friendRoutines.map(routine => {
+                    // Calculate total exercises from all days
+                    const totalExercises = (routine.days || []).reduce((sum, day) => sum + (day.exercises ? day.exercises.length : 0), 0);
+                    const totalDays = (routine.days || []).length;
+                    
+                    // Get all exercises from all days to display
+                    const allExercises = [];
+                    (routine.days || []).forEach(day => {
+                        (day.exercises || []).forEach(ex => {
+                            allExercises.push({
+                                name: ex.name || 'Sin nombre',
+                                dayName: day.name || 'Día',
+                                sets: ex.sets ? ex.sets.length : 0
+                            });
+                        });
+                    });
+                    
+                    return `
+                        <div class="routine-created__item">
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:8px">
+                                <div style="flex:1">
+                                    <div style="font-weight:600">${routine.name || 'Sin nombre'}</div>
+                                    <div style="font-size:0.8rem; color:var(--muted)">
+                                        ${totalDays} ${totalDays === 1 ? 'día' : 'días'} · ${totalExercises} ${totalExercises === 1 ? 'ejercicio' : 'ejercicios'}
+                                    </div>
+                                </div>
+                                <button class="btn btn--small btn--ghost js-copy-friend-routine" data-routine-id="${routine.id}" title="Copiar rutina">
+                                    📋 Copiar
+                                </button>
+                            </div>
+                            ${allExercises.length > 0 ? `
+                                <div style="padding-left:12px; border-left:2px solid var(--border); margin-top:8px">
+                                    ${allExercises.map((ex, idx) => `
+                                        <div style="margin-bottom:6px; font-size:0.85rem">
+                                            <div style="font-weight:600; color:var(--text)">${idx + 1}. ${ex.name}</div>
+                                            <div style="font-size:0.75rem; color:var(--muted); margin-top:2px">
+                                                ${ex.dayName} · ${ex.sets} ${ex.sets === 1 ? 'set' : 'sets'}
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                }).join('');
+            }
+        }
+
+        // Store friendId for delete and copy operations
+        $('#friendStatsDialog').dataset.friendId = friendId;
+        
+        // Store friend sessions for chart (as string for data attribute)
+        const friendSessionsStr = JSON.stringify(friendSessions);
+        $('#friendStatsDialog').dataset.friendSessions = friendSessionsStr;
+
+        // Draw friend's chart
+        setTimeout(() => {
+            drawFriendChart(friendSessions);
+        }, 100); // Small delay to ensure canvas is rendered
+
+        // Add event listeners for chart controls
+        const chartTypeSelect = $('#friendChartType');
+        const metricSelect = $('#friendChartMetric');
+        
+        if (chartTypeSelect) {
+            chartTypeSelect.onchange = () => {
+                const sessions = JSON.parse($('#friendStatsDialog').dataset.friendSessions || '[]');
+                drawFriendChart(sessions);
+            };
+        }
+        
+        if (metricSelect) {
+            metricSelect.onchange = () => {
+                const sessions = JSON.parse($('#friendStatsDialog').dataset.friendSessions || '[]');
+                drawFriendChart(sessions);
+            };
+        }
+
         $('#friendStatsDialog').showModal();
+    }
+    
+    // Function to calculate weekly data for friend's sessions
+    function weeklyDataFriend(sessions, period = 4, filter = 'all', metric = 'volume') {
+        const weeks = [], values = [];
+        const base = startOfWeek();
+
+        for (let i = period - 1; i >= 0; i--) {
+            const ws = addDays(base, -i * 7), we = addDays(ws, 6);
+            const subset = sessions.filter(s => {
+                if (!s.date) return false;
+                const d = new Date(s.date);
+                return d >= ws && d <= we;
+            });
+
+            let value = 0;
+            if (metric === 'volume') {
+                subset.forEach(s => (s.exercises || []).forEach(e => {
+                    if (filter === 'all' || e.name === filter) {
+                        (e.sets || []).forEach(st => value += (parseFloat(st.kg) || 0) * parseReps(st.reps));
+                    }
+                }));
+            } else if (metric === 'rir') {
+                let rirSum = 0, rirCount = 0;
+                subset.forEach(s => (s.exercises || []).forEach(e => {
+                    if (filter === 'all' || e.name === filter) {
+                        (e.sets || []).forEach(st => {
+                            const rir = parseRIR(st.rir);
+                            if (rir > 0) {
+                                rirSum += rir;
+                                rirCount++;
+                            }
+                        });
+                    }
+                }));
+                value = rirCount ? (rirSum / rirCount) : 0;
+            } else if (metric === 'weight') {
+                subset.forEach(s => (s.exercises || []).forEach(e => {
+                    if (filter === 'all' || e.name === filter) {
+                        (e.sets || []).forEach(st => {
+                            const kg = parseFloat(st.kg) || 0;
+                            if (kg > 0) value = Math.max(value, kg);
+                        });
+                    }
+                }));
+            }
+
+            weeks.push(`Sem ${period - i}`);
+            values.push(value);
+        }
+        return { weeks, values };
+    }
+    
+    // Function to draw friend's chart
+    function drawFriendChart(friendSessions) {
+        const canvas = $('#friendProgressChart');
+        if (!canvas) return;
+        
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        
+        // Resize canvas for high DPI
+        const rect = canvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        canvas.style.width = rect.width + 'px';
+        canvas.style.height = rect.height + 'px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        
+        const w = rect.width;
+        const h = rect.height;
+        
+        // Clear canvas
+        ctx.clearRect(0, 0, w, h);
+        
+        // Get chart type and metric
+        const chartTypeSelect = $('#friendChartType');
+        const metricSelect = $('#friendChartMetric');
+        const chartType = chartTypeSelect ? chartTypeSelect.value : 'pie';
+        const metric = metricSelect ? metricSelect.value : 'volume';
+        
+        // Get colors from theme
+        const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+        const barColor = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim() || '#5ea9ff';
+        const lineColor = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#ff6b9d';
+        const textColor = isLight ? '#1a1a1a' : '#ffffff';
+        const gridColor = isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)';
+        
+        const padding = { t: 30, r: 20, b: 40, l: 50 };
+        
+        // Calculate weekly data
+        const period = 4; // 4 weeks
+        const { weeks, values } = weeklyDataFriend(friendSessions, period, 'all', metric);
+        
+        if (chartType === 'pie') {
+            drawPieChart(ctx, canvas, weeks, values, metric, barColor, textColor, gridColor);
+        } else {
+            drawBarChart(ctx, canvas, weeks, values, metric, barColor, lineColor, gridColor, textColor, padding, w, h);
+        }
     }
 
     // Bind Social Events
@@ -6631,8 +6977,108 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!error) {
                 toast('Solicitud aceptada', 'ok');
                 loadSocialData();
+            } else {
+                toast('Error al aceptar solicitud', 'err');
+            }
+        }
+
+        if (e.target.classList.contains('js-decline-request')) {
+            e.preventDefault();
+            const id = e.target.dataset.id;
+            const { error } = await supabase
+                .from(TABLE_FRIEND_REQUESTS)
+                .update({ status: 'declined' })
+                .eq('id', id);
+
+            if (!error) {
+                toast('Solicitud rechazada', 'ok');
+                loadSocialData();
+            } else {
+                toast('Error al rechazar solicitud', 'err');
+            }
+        }
+
+        // Delete friend
+        if (e.target.id === 'btnDeleteFriend' || e.target.closest('#btnDeleteFriend')) {
+            e.preventDefault();
+            const friendId = $('#friendStatsDialog')?.dataset.friendId;
+            if (!friendId) return;
+
+            if (!confirm('¿Estás seguro de que quieres eliminar a este amigo?')) {
+                return;
+            }
+
+            const user = await supabaseService.getCurrentUser();
+            if (!user) return;
+
+            // Delete friendship (both directions)
+            const { error } = await supabase
+                .from(TABLE_FRIEND_REQUESTS)
+                .delete()
+                .or(`and(sender_id.eq.${user.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${user.id})`);
+
+            if (!error) {
+                toast('Amigo eliminado', 'ok');
+                $('#friendStatsDialog').close();
+                loadSocialData();
+            } else {
+                toast('Error al eliminar amigo', 'err');
+            }
+        }
+
+        // Copy friend's routine
+        if (e.target.classList.contains('js-copy-friend-routine') || e.target.closest('.js-copy-friend-routine')) {
+            e.preventDefault();
+            const routineId = e.target.closest('.js-copy-friend-routine')?.dataset.routineId || e.target.dataset.routineId;
+            if (!routineId) return;
+
+            const friendId = $('#friendStatsDialog')?.dataset.friendId;
+            if (!friendId) return;
+
+            // Fetch friend's user_data to get the routine
+            const { data: friendData } = await supabase
+                .from('user_data')
+                .select('data')
+                .eq('user_id', friendId)
+                .maybeSingle();
+
+            const friendUserData = friendData?.data || {};
+            const friendRoutines = friendUserData.routines || [];
+            const routineToCopy = friendRoutines.find(r => r.id === routineId);
+
+            if (!routineToCopy) {
+                toast('Rutina no encontrada', 'err');
+                return;
+            }
+
+            // Create a copy of the routine with new ID
+            const newRoutine = {
+                ...routineToCopy,
+                id: uuid(),
+                name: `${routineToCopy.name} (Copiada)`,
+                exercises: routineToCopy.exercises ? JSON.parse(JSON.stringify(routineToCopy.exercises)) : []
+            };
+
+            // Add to user's routines
+            if (!app.routines) app.routines = [];
+            app.routines.push(newRoutine);
+            save();
+
+            toast('Rutina copiada exitosamente', 'ok');
+            
+            // Refresh the dialog to show updated list
+            const routinesContainer = $('#friendRoutinesList');
+            if (routinesContainer) {
+                const routineElement = e.target.closest('.routine-created__item');
+                if (routineElement) {
+                    routineElement.style.opacity = '0.5';
+                    const copyBtn = routineElement.querySelector('.js-copy-friend-routine');
+                    if (copyBtn) {
+                        copyBtn.textContent = '✓ Copiada';
+                        copyBtn.disabled = true;
+                    }
+                }
             }
         }
     });
-
 });

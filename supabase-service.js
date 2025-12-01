@@ -127,18 +127,18 @@ class SupabaseService {
     }
 
     // Data operations
+    // Save data ONLY to Supabase - no localStorage fallback
     async saveUserData(data) {
         const user = await this.getCurrentUser();
         const userId = user?.id;
         if (!userId) {
-            // Fallback to localStorage
-            return this.saveToLocalStorage(data);
+            throw new Error('Usuario no autenticado. Debes iniciar sesión para guardar datos.');
         }
 
         if (!this.isOnline) {
             // Queue for sync when online
             this.queueForSync('save', data);
-            return this.saveToLocalStorage(data);
+            throw new Error('Sin conexión a internet. Los datos se guardarán cuando vuelvas a estar en línea.');
         }
 
         try {
@@ -158,28 +158,26 @@ class SupabaseService {
                 throw error;
             }
 
-            // Also save to localStorage as backup
-            this.saveToLocalStorage(data);
+            // Data saved successfully to Supabase only
             return true;
         } catch (error) {
             console.error('Save error:', error);
-            // Fallback to localStorage
+            // Queue for sync when online
             this.queueForSync('save', data);
-            return this.saveToLocalStorage(data);
+            throw error;
         }
     }
 
+    // Load data ONLY from Supabase - no localStorage fallback
     async loadUserData() {
         const user = await this.getCurrentUser();
         const userId = user?.id;
         if (!userId) {
-            // Fallback to localStorage
-            return this.loadFromLocalStorage();
+            throw new Error('Usuario no autenticado. Debes iniciar sesión para cargar datos.');
         }
 
         if (!this.isOnline) {
-            // Load from localStorage when offline
-            return this.loadFromLocalStorage();
+            throw new Error('Sin conexión a internet. No se pueden cargar los datos.');
         }
 
         try {
@@ -194,89 +192,25 @@ class SupabaseService {
                 if (error.code !== 'PGRST116' && error.code !== '42P01') {
                     throw error;
                 }
-                // If table doesn't exist or no data, return null
-                return this.loadFromLocalStorage();
+                // If table doesn't exist or no data, return null (new user)
+                return null;
             }
 
             if (data && data.data) {
-                // Merge with localStorage to ensure we have latest changes
-                const localData = this.loadFromLocalStorage();
-                const merged = this.mergeData(localData, data.data);
-                this.saveToLocalStorage(merged);
-                return merged;
+                // Return data from Supabase only
+                return data.data;
             }
 
-            // No data in Supabase, try localStorage
-            return this.loadFromLocalStorage();
+            // No data in Supabase (new user)
+            return null;
         } catch (error) {
             console.error('Load error:', error);
-            // Fallback to localStorage
-            return this.loadFromLocalStorage();
+            throw error;
         }
     }
 
-    // LocalStorage fallback methods
-    saveToLocalStorage(data) {
-        try {
-            const STORAGE_KEY = 'trainingDiary.data';
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-            return true;
-        } catch (error) {
-            console.error('LocalStorage save error:', error);
-            return false;
-        }
-    }
-
-    loadFromLocalStorage() {
-        try {
-            const STORAGE_KEY = 'trainingDiary.data';
-            const raw = localStorage.getItem(STORAGE_KEY);
-            if (!raw) return null;
-            return JSON.parse(raw);
-        } catch (error) {
-            console.error('LocalStorage load error:', error);
-            return null;
-        }
-    }
-
-    // Merge data from two sources (prioritize local changes)
-    mergeData(localData, remoteData) {
-        if (!localData) return remoteData;
-        if (!remoteData) return localData;
-
-        // Simple merge strategy: use local data if it exists, otherwise use remote
-        // For more complex scenarios, you might want to compare timestamps
-        const merged = { ...remoteData };
-        
-        // Merge arrays (sessions, routines, etc.)
-        if (localData.sessions && Array.isArray(localData.sessions)) {
-            merged.sessions = localData.sessions;
-        }
-        if (localData.routines && Array.isArray(localData.routines)) {
-            merged.routines = localData.routines;
-        }
-        if (localData.goals && Array.isArray(localData.goals)) {
-            merged.goals = localData.goals;
-        }
-        if (localData.achievements && Array.isArray(localData.achievements)) {
-            merged.achievements = localData.achievements;
-        }
-        if (localData.recentAchievements && Array.isArray(localData.recentAchievements)) {
-            merged.recentAchievements = localData.recentAchievements;
-        }
-
-        // Merge objects
-        if (localData.profile) merged.profile = { ...remoteData.profile, ...localData.profile };
-        if (localData.prs) merged.prs = { ...remoteData.prs, ...localData.prs };
-        if (localData.onerm) merged.onerm = { ...remoteData.onerm, ...localData.onerm };
-        if (localData.exerciseNotes) merged.exerciseNotes = { ...remoteData.exerciseNotes, ...localData.exerciseNotes };
-        if (localData.streak) merged.streak = localData.streak;
-        if (localData.weeklyGoal) merged.weeklyGoal = localData.weeklyGoal;
-        if (localData.statsPeriod) merged.statsPeriod = localData.statsPeriod;
-        if (localData.notes) merged.notes = localData.notes;
-
-        return merged;
-    }
+    // Note: LocalStorage methods removed - all app data is stored in Supabase only
+    // localStorage is only used for UI preferences (theme, colors) which are not app data
 
     // Queue operations for sync when online
     queueForSync(operation, data) {
