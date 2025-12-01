@@ -942,7 +942,7 @@ header::after {
 }
 
 .progress--up {
-    color: var(--progress-green);
+    color: var(--success);
     font-weight: 600;
 }
 
@@ -952,8 +952,7 @@ header::after {
 }
 
 .progress--same {
-    color: var(--warn);
-    font-weight: 600;
+    color: var(--muted);
 }
 
 /* Exercise Suggestions Dropdown */
