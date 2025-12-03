@@ -4888,7 +4888,7 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.readAsText(file);
     }
 
-    function applyRoutineImport() {
+    async function applyRoutineImport() {
         if (!app.routineImportBuffer) {
             safeRoutineAlert('No hay datos que importar.');
             return;
@@ -4930,20 +4930,30 @@ document.addEventListener('DOMContentLoaded', () => {
             if (typeof supabaseService !== 'undefined') {
                 const isAvailable = await supabaseService.isAvailable();
                 if (isAvailable) {
+                    let savedCount = 0;
+                    let failedCount = 0;
                     // Save each imported routine to routines table
                     for (const routine of importedRoutines) {
                         try {
                             await supabaseService.saveRoutine(routine);
+                            savedCount++;
                         } catch (error) {
                             console.warn('Error guardando rutina en tabla routines:', error);
+                            failedCount++;
                             // Continue even if routines table save fails
                         }
+                    }
+                    // Show feedback if some routines failed to save
+                    if (failedCount > 0 && savedCount > 0) {
+                        console.warn(`${savedCount} rutinas guardadas en Supabase, ${failedCount} fallaron`);
                     }
                 }
             }
         } catch (error) {
             // Remove imported routines if save failed
             app.routines = app.routines.filter(r => !importedRoutines.some(ir => ir.id === r.id));
+            safeRoutineAlert('Error al guardar las rutinas. Por favor, intenta de nuevo.');
+            console.error('Error al importar rutinas:', error);
             throw error;
         }
 
