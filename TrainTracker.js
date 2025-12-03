@@ -749,27 +749,56 @@ document.addEventListener('DOMContentLoaded', () => {
         return { name: routineName, days };
     }
 
-    function handleSaveRoutine(ev) {
+    async function handleSaveRoutine(ev) {
         if (ev) ev.preventDefault();
         const data = collectRoutineFromBuilder();
         if (!data) return;
+        
+        let routineToSave = null;
+        
         if (app.routineEditId) {
             const target = app.routines.find(r => r.id === app.routineEditId);
             if (target) {
                 target.name = data.name;
                 target.days = data.days;
+                routineToSave = target;
                 toast('Rutina actualizada', 'ok');
             }
         } else {
-            app.routines.push({
+            routineToSave = {
                 id: uuid(),
                 createdAt: new Date().toISOString(),
                 ...data
-            });
+            };
+            app.routines.push(routineToSave);
             toast('Rutina creada', 'ok');
         }
+        
         app.routineEditId = null;
-        save();
+        
+        // Save to both user_data and routines table
+        try {
+            await save();
+            // Also save to routines table
+            if (routineToSave && typeof supabaseService !== 'undefined') {
+                const isAvailable = await supabaseService.isAvailable();
+                if (isAvailable) {
+                    try {
+                        await supabaseService.saveRoutine(routineToSave);
+                    } catch (error) {
+                        console.warn('Error guardando rutina en tabla routines:', error);
+                        // Continue even if routines table save fails
+                    }
+                }
+            }
+        } catch (error) {
+            // Remove routine if save failed (only for new routines)
+            if (!app.routineEditId) {
+                app.routines = app.routines.filter(r => r.id !== routineToSave.id);
+            }
+            throw error;
+        }
+        
         renderRoutines();
         resetRoutineBuilder();
     }
@@ -4893,7 +4922,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Agregar las rutinas importadas
         app.routines = [...app.routines, ...importedRoutines];
-        save();
+        
+        // Save to both user_data and routines table
+        try {
+            await save();
+            // Also save each routine to routines table
+            if (typeof supabaseService !== 'undefined') {
+                const isAvailable = await supabaseService.isAvailable();
+                if (isAvailable) {
+                    // Save each imported routine to routines table
+                    for (const routine of importedRoutines) {
+                        try {
+                            await supabaseService.saveRoutine(routine);
+                        } catch (error) {
+                            console.warn('Error guardando rutina en tabla routines:', error);
+                            // Continue even if routines table save fails
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            // Remove imported routines if save failed
+            app.routines = app.routines.filter(r => !importedRoutines.some(ir => ir.id === r.id));
+            throw error;
+        }
 
         // Limpieza
         app.routineImportBuffer = null;
@@ -5327,10 +5379,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else if (type === 'routine') {
                 if (routineId) {
+                    // Delete from routines table first
+                    if (typeof supabaseService !== 'undefined') {
+                        const isAvailable = await supabaseService.isAvailable();
+                        if (isAvailable) {
+                            try {
+                                await supabaseService.deleteRoutine(routineId);
+                            } catch (error) {
+                                console.warn('Error eliminando rutina de tabla routines:', error);
+                                // Continue even if routines table delete fails
+                            }
+                        }
+                    }
+                    // Remove from app.routines
                     app.routines = app.routines.filter(r => r.id !== routineId);
                     if (app.routineEditId === routineId) {
                         resetRoutineBuilder();
                     }
+                    // Save to update user_data
+                    await save();
                 }
             } else if (type === 'goal') {
                 if (goalId) {

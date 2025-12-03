@@ -342,7 +342,83 @@ class SupabaseService {
         }
     }
 
-    // Update sync queue handler to handle session operations
+    // Routine operations - Save individual routine to routines table
+    async saveRoutine(routine) {
+        const user = await this.getCurrentUser();
+        const userId = user?.id;
+        if (!userId) {
+            throw new Error('Usuario no autenticado. Debes iniciar sesión para guardar rutinas.');
+        }
+
+        if (!this.isOnline) {
+            // Queue for sync when online
+            this.queueForSync('saveRoutine', routine);
+            throw new Error('Sin conexión a internet. La rutina se guardará cuando vuelvas a estar en línea.');
+        }
+
+        try {
+            const { data, error } = await supabase
+                .from('routines')
+                .upsert({
+                    id: routine.id,
+                    user_id: userId,
+                    routine_data: routine,
+                    updated_at: new Date().toISOString()
+                }, {
+                    onConflict: 'id'
+                })
+                .select();
+
+            if (error) {
+                console.error('Supabase routine save error:', error);
+                throw error;
+            }
+
+            return data?.[0] || null;
+        } catch (error) {
+            console.error('Save routine error:', error);
+            // Queue for sync when online
+            this.queueForSync('saveRoutine', routine);
+            throw error;
+        }
+    }
+
+    // Delete routine from routines table
+    async deleteRoutine(routineId) {
+        const user = await this.getCurrentUser();
+        const userId = user?.id;
+        if (!userId) {
+            throw new Error('Usuario no autenticado. Debes iniciar sesión para eliminar rutinas.');
+        }
+
+        if (!this.isOnline) {
+            // Queue for sync when online
+            this.queueForSync('deleteRoutine', { routineId });
+            throw new Error('Sin conexión a internet. La rutina se eliminará cuando vuelvas a estar en línea.');
+        }
+
+        try {
+            const { error } = await supabase
+                .from('routines')
+                .delete()
+                .eq('id', routineId)
+                .eq('user_id', userId);
+
+            if (error) {
+                console.error('Supabase routine delete error:', error);
+                throw error;
+            }
+
+            return true;
+        } catch (error) {
+            console.error('Delete routine error:', error);
+            // Queue for sync when online
+            this.queueForSync('deleteRoutine', { routineId });
+            throw error;
+        }
+    }
+
+    // Update sync queue handler to handle session and routine operations
     async syncPendingChanges() {
         if (this.syncInProgress || !this.isOnline || !this.isAvailable()) return;
         
@@ -356,6 +432,10 @@ class SupabaseService {
                     await this.saveSession(item.data);
                 } else if (item.operation === 'deleteSession') {
                     await this.deleteSession(item.data.sessionId);
+                } else if (item.operation === 'saveRoutine') {
+                    await this.saveRoutine(item.data);
+                } else if (item.operation === 'deleteRoutine') {
+                    await this.deleteRoutine(item.data.routineId);
                 }
             }
         } catch (error) {
