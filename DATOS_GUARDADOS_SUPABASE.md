@@ -1,4 +1,4 @@
-# Datos Guardados en Supabase - TrainTracker
+# Datos Guardados en Supabase - SuperTracker
 
 ## ✅ Resumen
 
@@ -205,7 +205,7 @@ Estos datos se mantienen en localStorage porque son preferencias de UI locales:
 
 ## 🔄 Flujo de Guardado
 
-### Función `save()` en TrainTracker.js
+### Función `save()` en SuperTracker.js
 
 Cada vez que se modifica cualquier dato, se llama a `save()` que:
 
@@ -232,7 +232,7 @@ Cada vez que se modifica cualquier dato, se llama a `save()` que:
 
 3. Si hay error, muestra mensaje al usuario (no hay fallback a localStorage)
 
-### Función `load()` en TrainTracker.js
+### Función `load()` en SuperTracker.js
 
 Al iniciar sesión:
 
@@ -251,7 +251,7 @@ Al iniciar sesión:
 
 ## 🧹 Limpieza Opcional
 
-Se puede eliminar la constante `STORAGE_KEY` en la línea 242 de TrainTracker.js ya que no se usa:
+Se puede eliminar la constante `STORAGE_KEY` en la línea 242 de SuperTracker.js ya que no se usa:
 
 ```javascript
 // Línea 242 - Puede eliminarse

@@ -46,7 +46,7 @@ function initSupabase() {
                 // Use a single storage key to avoid multiple instances warning
                 supabase = createClientFn(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey, {
                     auth: {
-                        storageKey: 'trainTracker-auth',
+                        storageKey: 'superTracker-auth',
                         autoRefreshToken: true,
                         persistSession: true,
                         detectSessionInUrl: true

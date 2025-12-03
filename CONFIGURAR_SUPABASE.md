@@ -8,7 +8,7 @@ Esta guía te mostrará paso a paso cómo obtener tus credenciales de Supabase y
 2. Si no tienes cuenta, crea una (es gratis)
 3. Una vez dentro, haz clic en **"New Project"**
 4. Completa el formulario:
-   - **Name**: `TrainTracker` (o el nombre que prefieras)
+   - **Name**: `SuperTracker` (o el nombre que prefieras)
    - **Database Password**: Elige una contraseña segura ⚠️ **GUÁRDALA BIEN**
    - **Region**: Selecciona la región más cercana a ti
 5. Haz clic en **"Create new project"**

@@ -47,8 +47,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Color definitions: [primary, primary-600, accent, accent-600]
     const COLOR_PRESETS = {
         azul: {
-            dark: { primary: '#5ea9ff', primary600: '#0080e9', accent: '#5ea9ff', accent600: '#0080e9' },
-            light: { primary: '#5ea9ff', primary600: '#0080e9', accent: '#5ea9ff', accent600: '#0080e9' }
+            dark: { primary: '#388BFF', primary600: '#0011FF', accent: '#388BFF', accent600: '#0011FF' },
+            light: { primary: '#388BFF', primary600: '#0011FF', accent: '#388BFF', accent600: '#0011FF' }
         },
         rojo: {
             dark: { primary: '#ff6b6b', primary600: '#ff3b30', accent: '#ff6b6b', accent600: '#ff3b30' },
@@ -59,7 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
             light: { primary: '#34c759', primary600: '#248a3d', accent: '#34c759', accent600: '#248a3d' }
         },
         amarillo: {
-            dark: { primary: '#FFE100', primary600: '#FFF757', accent: '#FFE100', accent600: '#FFF757' },
+            dark: { primary: '#ffcc00', primary600: '#ff9500', accent: '#ffcc00', accent600: '#ff9500' },
             light: { primary: '#ffcc00', primary600: '#ff9500', accent: '#ffcc00', accent600: '#ff9500' }
         },
         morado: {
@@ -75,8 +75,8 @@ document.addEventListener('DOMContentLoaded', () => {
             light: { primary: '#ff9500', primary600: '#ff6b00', accent: '#ff9500', accent600: '#ff6b00' }
         },
         cian: {
-            dark: { primary: '#3bc9db', primary600: '#007aff', accent: '#3bc9db', accent600: '#007aff' },
-            light: { primary: '#3bc9db', primary600: '#007aff', accent: '#3bc9db', accent600: '#007aff' }
+            dark: { primary: '#00D5FF', primary600: '#0090AD', accent: '#00D5FF', accent600: '#0090AD' },
+            light: { primary: '#00D5FF', primary600: '#0090AD', accent: '#00D5FF', accent600: '#0090AD' }
         },
         gris: {
             dark: { primary: '#adb5bd', primary600: '#868e96', accent: '#adb5bd', accent600: '#868e96' },
@@ -1272,8 +1272,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         const hadPrev = prevDetails.length > 0;
 
-        container.innerHTML = '';
-
         // Use robust function to check if there are any sessions in the visible week
         const hasSessions = hasSessionsThisWeek();
 
@@ -1283,6 +1281,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 emptyState.hidden = false;
                 emptyState.style.display = '';
             }
+            container.innerHTML = '';
             return;
         }
 
@@ -1303,6 +1302,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (aCompleted !== bCompleted) return aCompleted ? 1 : -1;
             return parseLocalDate(a.date) - parseLocalDate(b.date);
         });
+
+        // Use DocumentFragment for better performance (reduces reflows)
+        const fragment = document.createDocumentFragment();
 
         // Render each session as its own day (collapsible <details> element)
         sortedSessions.forEach(session => {
@@ -1383,22 +1385,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
             dayBody.appendChild(card);
             details.appendChild(dayBody);
-            container.appendChild(details);
+            fragment.appendChild(details);
 
-            // Add toggle event listener to trigger animation each time
+            // Add toggle event listener to trigger animation each time (use passive for better performance)
             details.addEventListener('toggle', function () {
                 if (this.open) {
-                    // Remove animation class first to reset
-                    const sessionCard = this.querySelector('.session.card');
-                    if (sessionCard) {
-                        sessionCard.classList.remove('animate-in');
-                        // Force reflow to reset animation
-                        void sessionCard.offsetWidth;
-                        // Add class to trigger animation
-                        setTimeout(() => {
-                            sessionCard.classList.add('animate-in');
-                        }, 10);
-                    }
+                    // Use requestAnimationFrame for smoother animations
+                    requestAnimationFrame(() => {
+                        const sessionCard = this.querySelector('.session.card');
+                        if (sessionCard) {
+                            sessionCard.classList.remove('animate-in');
+                            // Force reflow to reset animation
+                            void sessionCard.offsetWidth;
+                            // Add class to trigger animation
+                            requestAnimationFrame(() => {
+                                sessionCard.classList.add('animate-in');
+                            });
+                        }
+                    });
                 } else {
                     // Remove animation class when closing
                     const sessionCard = this.querySelector('.session.card');
@@ -1406,18 +1410,22 @@ document.addEventListener('DOMContentLoaded', () => {
                         sessionCard.classList.remove('animate-in');
                     }
                 }
-            });
+            }, { passive: true });
 
-            // Trigger animation on initial open
+            // Trigger animation on initial open (defer to avoid blocking)
             if (details.open) {
-                setTimeout(() => {
+                requestAnimationFrame(() => {
                     const sessionCard = details.querySelector('.session.card');
                     if (sessionCard) {
                         sessionCard.classList.add('animate-in');
                     }
-                }, 50);
+                });
             }
         });
+
+        // Append fragment to container in one operation (single reflow)
+        container.innerHTML = '';
+        container.appendChild(fragment);
     }
     function renderExercise(session, ex) {
         const block = $('#tpl-exercise').content.firstElementChild.cloneNode(true);
@@ -4022,7 +4030,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (currentValue > 0 && baseValue === 0) {
                 // We have current data but no comparison - show as first record
                 progressText = 'Primer registro';
-                progressClass = 'progress--up';
+                progressClass = 'progress--same'; // Yellow for no comparison
             } else if (currentValue === 0) {
                 // No data at all
                 progressText = 'Sin datos';
@@ -4037,7 +4045,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td>${currentStats.totalReps}</td>
                     <td>${currentStats.totalVol.toLocaleString()} kg</td>
                     <td>${currentAvgRir > 0 ? currentAvgRir.toFixed(1) : '–'}</td>
-                    <td class="${progressClass}">${progressText}</td>
+                    <td class="${progressClass}" style="font-weight: 600;">${progressText}</td>
                 </tr>
             `;
         }).join('');

@@ -1,6 +1,6 @@
-# Configuración de Supabase para TrainTracker
+# Configuración de Supabase para SuperTracker
 
-Esta guía te ayudará a configurar Supabase para escalar TrainTracker y permitir sincronización de datos entre dispositivos.
+Esta guía te ayudará a configurar Supabase para escalar SuperTracker y permitir sincronización de datos entre dispositivos.
 
 ## Pasos de Configuración
 
@@ -10,7 +10,7 @@ Esta guía te ayudará a configurar Supabase para escalar TrainTracker y permiti
 2. Crea una cuenta o inicia sesión
 3. Haz clic en "New Project"
 4. Completa la información del proyecto:
-   - **Name**: TrainTracker (o el nombre que prefieras)
+   - **Name**: SuperTracker (o el nombre que prefieras)
    - **Database Password**: Elige una contraseña segura (guárdala)
    - **Region**: Selecciona la región más cercana
 5. Espera a que se cree el proyecto (puede tardar 1-2 minutos)

@@ -1,5 +1,5 @@
 # DESARROLLADO POR FRANCISCO SANZ 
-TrainTracker es una aplicación web progresiva (PWA) diseñada para ayudarte a registrar, analizar y mejorar tus entrenamientos. Con una interfaz moderna y responsive, te permite llevar un control detallado de tu progreso, establecer objetivos y visualizar estadísticas de manera sencilla.
+SuperTracker es una aplicación web progresiva (PWA) diseñada para ayudarte a registrar, analizar y mejorar tus entrenamientos. Con una interfaz moderna y responsive, te permite llevar un control detallado de tu progreso, establecer objetivos y visualizar estadísticas de manera sencilla.
 
 🌟 Características Principales
 
