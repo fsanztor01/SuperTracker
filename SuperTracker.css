@@ -1640,7 +1640,7 @@ textarea.input:disabled {
 .exercise {
     padding: 10px;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
-    background: var(--surface-2);
+    background: rgba(3, 0, 0, 0.541);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
