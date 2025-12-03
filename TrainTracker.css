@@ -952,7 +952,8 @@ header::after {
 }
 
 .progress--same {
-    color: var(--muted);
+    color: var(--warn);
+    font-weight: 600;
 }
 
 /* Exercise Suggestions Dropdown */
