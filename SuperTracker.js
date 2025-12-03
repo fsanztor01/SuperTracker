@@ -753,9 +753,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (ev) ev.preventDefault();
         const data = collectRoutineFromBuilder();
         if (!data) return;
-        
+
         let routineToSave = null;
-        
+
         if (app.routineEditId) {
             const target = app.routines.find(r => r.id === app.routineEditId);
             if (target) {
@@ -773,9 +773,9 @@ document.addEventListener('DOMContentLoaded', () => {
             app.routines.push(routineToSave);
             toast('Rutina creada', 'ok');
         }
-        
+
         app.routineEditId = null;
-        
+
         // Save to both user_data and routines table
         try {
             await save();
@@ -798,7 +798,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             throw error;
         }
-        
+
         renderRoutines();
         resetRoutineBuilder();
     }
@@ -1253,7 +1253,240 @@ document.addEventListener('DOMContentLoaded', () => {
         if (ci > pi) return [`Más RIR: ${pi} → ${ci}`, 'progress--down'];
         return ['Sin cambio', 'progress--same'];
     }
+    /* =================== Event Delegation =================== */
+    function setupDiaryEventDelegation() {
+        const container = document.getElementById('sessions');
+        if (!container) return;
 
+        // Helper to find closest session/exercise/set IDs
+        const getIds = (target) => {
+            const sessionCard = target.closest('.session.card');
+            const exerciseBlock = target.closest('.exercise');
+            const setRow = target.closest('tr') || target.closest('.set-card');
+
+            return {
+                sessionId: sessionCard?.dataset.id,
+                exId: exerciseBlock?.dataset.exId,
+                setId: setRow?.dataset.setId
+            };
+        };
+
+        // CLICK Delegation
+        container.addEventListener('click', async (e) => {
+            const target = e.target;
+            const { sessionId, exId, setId } = getIds(target);
+
+            // 1. Session Actions
+            if (target.closest('.js-complete')) {
+                e.preventDefault();
+                if (sessionId) toggleCompleted(sessionId);
+                return;
+            }
+
+            if (target.closest('.js-edit-session')) {
+                e.preventDefault();
+                if (sessionId) startEditingSession(sessionId);
+                return;
+            }
+
+            if (target.closest('.js-add-ex')) {
+                e.preventDefault();
+                if (sessionId) addExercise(sessionId);
+                return;
+            }
+
+            if (target.closest('.js-delete')) {
+                e.preventDefault();
+                if (sessionId) deleteSession(sessionId);
+                return;
+            }
+
+            // 2. Exercise Actions
+            if (target.closest('.js-add-set')) {
+                e.preventDefault();
+                if (sessionId && exId) addSet(sessionId, exId);
+                return;
+            }
+
+            if (target.closest('.js-del-ex')) {
+                e.preventDefault();
+                if (sessionId && exId) deleteExercise(sessionId, exId);
+                return;
+            }
+
+            if (target.closest('.exercise-reorder-up')) {
+                e.preventDefault();
+                if (sessionId && exId) moveExercise(sessionId, exId, 'up');
+                return;
+            }
+
+            if (target.closest('.exercise-reorder-down')) {
+                e.preventDefault();
+                if (sessionId && exId) moveExercise(sessionId, exId, 'down');
+                return;
+            }
+
+            if (target.closest('.exercise-note-btn') || target.closest('.exercise-note-edit')) {
+                e.preventDefault();
+                const name = target.closest('.exercise')?.querySelector('.exercise__name')?.textContent;
+                if (sessionId && exId) openExerciseNoteDialog(sessionId, exId, name);
+                return;
+            }
+
+            if (target.closest('.exercise-note-delete')) {
+                e.preventDefault();
+                if (sessionId && exId) {
+                    saveExerciseNote(sessionId, exId, '');
+                    refresh({ preserveTab: true });
+                }
+                return;
+            }
+
+            // 3. Set Actions
+            if (target.closest('.js-del-set')) {
+                e.preventDefault();
+                if (sessionId && exId && setId) deleteSet(sessionId, exId, setId);
+                return;
+            }
+
+            if (target.closest('.js-rest-timer')) {
+                e.preventDefault();
+                openRestTimer();
+                return;
+            }
+
+            if (target.closest('.js-prev-week-data')) {
+                e.preventDefault();
+                const btn = target.closest('.js-prev-week-data');
+                const row = btn.closest('tr') || btn.closest('.set-card');
+                togglePrevWeekData(row, sessionId, exId, setId);
+                return;
+            }
+
+            // 4. Exercise Name Editing (Click on name)
+            if (target.classList.contains('exercise__name')) {
+                if (sessionId && exId) {
+                    makeExerciseNameEditable(target, sessionId, exId);
+                }
+            }
+        });
+
+        // INPUT/CHANGE Delegation for Sets
+        container.addEventListener('input', debounce((e) => {
+            const target = e.target;
+            if (!target.classList.contains('js-kg') &&
+                !target.classList.contains('js-reps') &&
+                !target.classList.contains('js-rir')) return;
+
+            const { sessionId, exId, setId } = getIds(target);
+            if (!sessionId || !exId || !setId) return;
+
+            const field = target.classList.contains('js-kg') ? 'kg' :
+                target.classList.contains('js-reps') ? 'reps' : 'rir';
+
+            updateSetData(sessionId, exId, setId, field, target.value);
+        }, 500));
+    }
+
+    // Helper for inline editing
+    function makeExerciseNameEditable(element, sessionId, exId) {
+        if (element.querySelector('input')) return; // Already editing
+
+        const currentName = element.textContent;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'input';
+        input.value = currentName;
+        input.style.width = '100%';
+        input.style.maxWidth = '300px';
+        input.style.fontSize = 'inherit';
+        input.style.fontWeight = 'inherit';
+
+        // Create confirmation buttons container
+        const confirmContainer = document.createElement('div');
+        confirmContainer.style.display = 'flex';
+        confirmContainer.style.gap = '8px';
+        confirmContainer.style.marginTop = '8px';
+        confirmContainer.style.alignItems = 'center';
+
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'btn btn--small';
+        saveBtn.textContent = '💾 Guardar';
+        saveBtn.style.margin = '0';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'btn btn--small btn--ghost';
+        cancelBtn.textContent = '✕ Cancelar';
+        cancelBtn.style.margin = '0';
+
+        confirmContainer.appendChild(saveBtn);
+        confirmContainer.appendChild(cancelBtn);
+
+        // Replace text with input
+        element.textContent = '';
+        element.appendChild(input);
+        element.appendChild(confirmContainer);
+
+        input.focus();
+        input.select();
+
+        const cleanup = () => {
+            // Re-render will happen on refresh, but for immediate UI feedback:
+            // We rely on refresh() called by updateExerciseName
+        };
+
+        const saveChanges = () => {
+            const newName = input.value.trim();
+            if (newName && newName !== currentName) {
+                updateExerciseName(sessionId, exId, newName, currentName);
+            } else {
+                cancelChanges();
+            }
+        };
+
+        const cancelChanges = () => {
+            element.innerHTML = '';
+            element.textContent = currentName;
+        };
+
+        saveBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            saveChanges();
+        });
+
+        cancelBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            cancelChanges();
+        });
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                saveChanges();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                cancelChanges();
+            }
+        });
+
+        // Prevent click propagation from input to container
+        input.addEventListener('click', (e) => e.stopPropagation());
+    }
+
+    // Debounce helper
+    function debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }
     /* =================== Render sesiones =================== */
     function renderSessions() {
         const container = $('#sessions');
@@ -1303,6 +1536,22 @@ document.addEventListener('DOMContentLoaded', () => {
             return parseLocalDate(a.date) - parseLocalDate(b.date);
         });
 
+        // Determine which session should be expanded by default (the "current" day)
+        let currentSessionId = null;
+        if (!hadPrev) {
+            // Find the first incomplete session (regardless of date)
+            const firstIncomplete = sortedSessions.find(s => !s.completed);
+
+            if (firstIncomplete) {
+                currentSessionId = firstIncomplete.id;
+            } else {
+                // If all sessions are completed, expand the last one
+                if (sortedSessions.length > 0) {
+                    currentSessionId = sortedSessions[sortedSessions.length - 1].id;
+                }
+            }
+        }
+
         // Use DocumentFragment for better performance (reduces reflows)
         const fragment = document.createDocumentFragment();
 
@@ -1317,13 +1566,13 @@ document.addEventListener('DOMContentLoaded', () => {
             details.dataset.dayKey = dayKey;
             details.dataset.sessionId = sessionId;
 
-            // Restore previous user state if available; otherwise open non-completed sessions by default
+            // Restore previous user state if available; otherwise only open the "current" session
             if (hadPrev) {
                 details.open = prevOpen.has(dayKey) || prevOpen.has(sessionId);
             } else {
-                details.open = !session.completed;
+                // Only expand the current day
+                details.open = (sessionId === currentSessionId);
             }
-
             const summary = document.createElement('summary');
             summary.style.display = 'flex';
             summary.style.justifyContent = 'space-between';
@@ -1433,130 +1682,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const nameEl = block.querySelector('.exercise__name');
         nameEl.textContent = ex.name;
 
-        // Make name editable on click (inline editing with save/cancel)
-        let isEditing = false;
+        // Make name editable on click (delegated)
         nameEl.style.cursor = 'pointer';
         nameEl.title = 'Clic para editar';
-
-        const makeEditable = (element) => {
-            element.addEventListener('click', function handleClick(e) {
-                // Prevent event bubbling if clicking on edit button
-                if (e.target.closest('.js-edit-exercise-name')) return;
-                if (isEditing) return;
-                isEditing = true;
-                const originalName = ex.name;
-                const input = document.createElement('input');
-                input.type = 'text';
-                input.className = 'input';
-                input.value = originalName;
-                input.style.width = '100%';
-                input.style.maxWidth = '300px';
-                input.style.fontSize = 'inherit';
-                input.style.fontWeight = 'inherit';
-                const parentEl = element.parentElement;
-                element.replaceWith(input);
-                input.focus();
-                input.select();
-
-                // Create confirmation buttons container
-                const confirmContainer = document.createElement('div');
-                confirmContainer.style.display = 'flex';
-                confirmContainer.style.gap = '8px';
-                confirmContainer.style.marginTop = '8px';
-                confirmContainer.style.alignItems = 'center';
-
-                const saveBtn = document.createElement('button');
-                saveBtn.className = 'btn btn--small';
-                saveBtn.textContent = '💾 Guardar';
-                saveBtn.style.margin = '0';
-
-                const cancelBtn = document.createElement('button');
-                cancelBtn.className = 'btn btn--small btn--ghost';
-                cancelBtn.textContent = '✕ Cancelar';
-                cancelBtn.style.margin = '0';
-
-                confirmContainer.appendChild(saveBtn);
-                confirmContainer.appendChild(cancelBtn);
-
-                // Insert confirmation buttons after input
-                input.parentElement.insertBefore(confirmContainer, input.nextSibling);
-
-                const cleanup = () => {
-                    confirmContainer.remove();
-                    isEditing = false;
-                };
-
-                const saveChanges = () => {
-                    const newName = input.value.trim();
-                    if (newName && newName !== originalName) {
-                        if (updateExerciseName(session.id, ex.id, newName, originalName)) {
-                            // Update the name element with new name
-                            const newNameEl = document.createElement('div');
-                            newNameEl.className = 'exercise__name';
-                            newNameEl.textContent = newName;
-                            newNameEl.style.cursor = 'pointer';
-                            newNameEl.title = 'Clic para editar';
-                            input.replaceWith(newNameEl);
-                            makeEditable(newNameEl);
-                            cleanup();
-                        } else {
-                            // If update failed, restore original
-                            cancelChanges();
-                        }
-                    } else {
-                        cancelChanges();
-                    }
-                };
-
-                const cancelChanges = () => {
-                    const newNameEl = document.createElement('div');
-                    newNameEl.className = 'exercise__name';
-                    newNameEl.textContent = originalName;
-                    newNameEl.style.cursor = 'pointer';
-                    newNameEl.title = 'Clic para editar';
-                    input.replaceWith(newNameEl);
-                    makeEditable(newNameEl);
-                    cleanup();
-                };
-
-                saveBtn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    saveChanges();
-                });
-
-                cancelBtn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    cancelChanges();
-                });
-
-                input.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter') {
-                        e.preventDefault();
-                        saveChanges();
-                    } else if (e.key === 'Escape') {
-                        e.preventDefault();
-                        cancelChanges();
-                    }
-                });
-
-                // Don't close on blur if clicking on buttons
-                input.addEventListener('blur', (e) => {
-                    // Delay to allow button clicks to register
-                    setTimeout(() => {
-                        if (!confirmContainer.contains(document.activeElement) && document.activeElement !== input) {
-                            // Only cancel if focus moved outside the edit area
-                            if (!confirmContainer.contains(e.relatedTarget)) {
-                                cancelChanges();
-                            }
-                        }
-                    }, 200);
-                });
-            });
-        };
-
-        makeEditable(nameEl);
 
         // Add note button to exercise head
         const headEl = block.querySelector('.exercise__head');
@@ -1604,17 +1732,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     downBtn.style.cursor = 'not-allowed';
                 }
 
-                upBtn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    moveExercise(session.id, ex.id, 'up');
-                });
 
-                downBtn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    moveExercise(session.id, ex.id, 'down');
-                });
 
                 // Insert arrows at the beginning of the buttons container
                 buttonsContainer.insertBefore(upBtn, buttonsContainer.firstChild);
@@ -1634,7 +1752,7 @@ document.addEventListener('DOMContentLoaded', () => {
             noteBtn.setAttribute('aria-label', hasNote ? 'Editar nota del ejercicio' : 'Añadir nota del ejercicio');
             noteBtn.dataset.sessionId = session.id;
             noteBtn.dataset.exId = ex.id;
-            noteBtn.addEventListener('click', () => openExerciseNoteDialog(session.id, ex.id, ex.name));
+            // noteBtn.addEventListener('click', () => openExerciseNoteDialog(session.id, ex.id, ex.name)); // Delegated
             headEl.appendChild(noteBtn);
         }
 
@@ -1660,11 +1778,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     <button class="exercise-note-delete" data-session-id="${session.id}" data-ex-id="${ex.id}" aria-label="Eliminar nota">🗑️</button>
                 </div>
             `;
-            noteDisplay.querySelector('.exercise-note-edit').addEventListener('click', () => openExerciseNoteDialog(session.id, ex.id, ex.name));
-            noteDisplay.querySelector('.exercise-note-delete').addEventListener('click', () => {
-                saveExerciseNote(session.id, ex.id, '');
-                refresh({ preserveTab: true });
-            });
+            // Listeners removed - handled by delegation
+            // noteDisplay.querySelector('.exercise-note-edit').addEventListener('click', ...);
+            // noteDisplay.querySelector('.exercise-note-delete').addEventListener('click', ...);
             block.appendChild(noteDisplay);
         }
 
@@ -3175,7 +3291,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function addSession({ name, date }) {
         const newSession = { id: uuid(), name, date, completed: false, exercises: [] };
         app.sessions.push(newSession);
-        
+
         // Save to both user_data and sessions table
         try {
             await save();
@@ -3198,13 +3314,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         refresh();
     }
-    
+
     async function updateSession(id, { name, date }) {
         const session = app.sessions.find(s => s.id === id);
         if (!session) return;
         session.name = name;
         session.date = date;
-        
+
         // Save to both user_data and sessions table
         try {
             await save();
@@ -3307,10 +3423,23 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!s) return;
         const wasCompleted = s.completed;
         s.completed = !s.completed;
-        
+
+        // Auto-update date to today if completing a past session
+        if (s.completed && !wasCompleted) {
+            const sessionDate = parseLocalDate(s.date);
+            sessionDate.setHours(0, 0, 0, 0);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            // If session date is in the past, update it to today
+            if (sessionDate < today) {
+                s.date = toLocalISO(today);
+            }
+        }
+
         try {
             await save();
-            
+
             // Also update in sessions table
             if (typeof supabaseService !== 'undefined') {
                 const isAvailable = await supabaseService.isAvailable();
@@ -3328,7 +3457,7 @@ document.addEventListener('DOMContentLoaded', () => {
             s.completed = wasCompleted;
             throw error;
         }
-        
+
         // Update competitive mode stats
         updateStreak();
         updateWeeklyGoal();
@@ -4686,7 +4815,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Map sessions: use real dates from JSON if available, otherwise use sequential dates
         const mapped = app.importBuffer.map((s, idx) => {
             let dateISO;
-            
+
             // Try to use the date from the JSON if it exists and is valid
             if (s.date && typeof s.date === 'string') {
                 try {
@@ -4715,7 +4844,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 sessionDate.setHours(12, 0, 0, 0);
                 dateISO = toLocalISO(sessionDate);
             }
-            
+
             return normalizeSessionFromImport(s, dateISO);
         });
 
@@ -4734,17 +4863,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Inserta las sesiones
         app.sessions = [...app.sessions, ...newSessions];
-        
+
         // Wait for save to complete before continuing
         try {
             await save();
-            
+
             // Also save to sessions table
             if (typeof supabaseService !== 'undefined' && newSessions.length > 0) {
                 const isAvailable = await supabaseService.isAvailable();
                 if (isAvailable) {
                     // Save all imported sessions to sessions table in parallel
-                    const savePromises = newSessions.map(session => 
+                    const savePromises = newSessions.map(session =>
                         supabaseService.saveSession(session).catch(error => {
                             console.warn(`Error guardando sesión ${session.id} en tabla sessions:`, error);
                             return null; // Continue even if one fails
@@ -4753,7 +4882,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     await Promise.all(savePromises);
                 }
             }
-            
+
             // Always refresh to update UI (renderSessions will check if we're viewing the imported week)
             refresh();
 
@@ -4930,7 +5059,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Agregar las rutinas importadas
         app.routines = [...app.routines, ...importedRoutines];
-        
+
         // Save to both user_data and routines table
         try {
             await save();
@@ -5141,7 +5270,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Semana
         $('#prevWeek').addEventListener('click', () => { app.weekOffset--; refresh(); });
         $('#nextWeek').addEventListener('click', () => { app.weekOffset++; refresh(); });
-        
+
         // Delete week button
         $('#btnDeleteWeek').addEventListener('click', () => {
             const weekSessions = getWeekSessions();
@@ -5149,13 +5278,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 toast('No hay sesiones en esta semana para borrar', 'warn');
                 return;
             }
-            
+
             // Set delete target for week deletion
             app.deleteTarget = {
                 type: 'week',
                 sessionIds: weekSessions.map(s => s.id)
             };
-            
+
             // Show confirmation dialog
             $('#confirmTitle').textContent = 'Confirmar eliminación';
             $('#confirmMessage').textContent = `¿Estás seguro de que quieres borrar la semana? Se eliminarán ${weekSessions.length} sesión(es). Esta acción no se puede deshacer.`;
@@ -5346,7 +5475,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (type === 'session') {
                 const sessionToDelete = app.sessions.find(s => s.id === id);
                 app.sessions = app.sessions.filter(s => s.id !== id);
-                
+
                 // Also delete from sessions table
                 if (sessionToDelete && typeof supabaseService !== 'undefined') {
                     const isAvailable = await supabaseService.isAvailable();
@@ -5363,13 +5492,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Delete all sessions from the visible week
                 if (sessionIds && sessionIds.length > 0) {
                     app.sessions = app.sessions.filter(s => !sessionIds.includes(s.id));
-                    
+
                     // Also delete from sessions table
                     if (typeof supabaseService !== 'undefined') {
                         const isAvailable = await supabaseService.isAvailable();
                         if (isAvailable) {
                             // Delete all sessions in parallel
-                            const deletePromises = sessionIds.map(sessionId => 
+                            const deletePromises = sessionIds.map(sessionId =>
                                 supabaseService.deleteSession(sessionId).catch(error => {
                                     console.warn(`Error eliminando sesión ${sessionId} de tabla sessions:`, error);
                                     return null; // Continue even if one fails
@@ -6193,7 +6322,7 @@ document.addEventListener('DOMContentLoaded', () => {
             updateStreak();
             updateWeeklyGoal();
             checkAchievements();
-            
+
             // Sync profile to Supabase after loading
             if (app.profile) {
                 syncProfileToSupabase(app.profile.firstName, app.profile.lastName);
@@ -6343,24 +6472,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
         save();
         renderProfile();
-        
+
         // Sync profile to Supabase profiles table
         syncProfileToSupabase(firstName, lastName);
-        
+
         toast('Perfil actualizado', 'ok');
     }
-    
+
     // Function to sync profile data to Supabase profiles table
     async function syncProfileToSupabase(firstName, lastName) {
         if (!supabase) return;
-        
+
         try {
             const user = await supabaseService.getCurrentUser();
             if (!user) return;
-            
+
             // Get avatar URL if exists
             const avatarUrl = app.profile.photo || null;
-            
+
             // Update or insert profile in Supabase
             const { error } = await supabase
                 .from('profiles')
@@ -6373,7 +6502,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }, {
                     onConflict: 'id'
                 });
-            
+
             if (error) {
                 console.error('Error syncing profile to Supabase:', error);
             }
@@ -6700,18 +6829,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     .select('data')
                     .eq('user_id', req.sender_id)
                     .maybeSingle();
-                
+
                 const senderUserData = senderData?.data || {};
                 const senderProfile = senderUserData.profile || {};
-                
+
                 // Get name from user_data profile (same as Perfil>Nombre) or from profiles table
                 const firstName = senderProfile.firstName || req.sender.first_name || '';
                 const lastName = senderProfile.lastName || req.sender.last_name || '';
                 const fullName = (firstName + ' ' + lastName).trim();
-                
+
                 const div = document.createElement('div');
                 div.className = 'routine-created__item';
-                
+
                 div.innerHTML = `
                     <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap">
                         <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:0">
@@ -6760,15 +6889,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     .select('data')
                     .eq('user_id', f.id)
                     .maybeSingle();
-                
+
                 const friendUserData = friendData?.data || {};
                 const friendProfile = friendUserData.profile || {};
-                
+
                 // Get name from user_data profile (same as Perfil>Nombre) or from profiles table
                 const firstName = friendProfile.firstName || f.first_name || '';
                 const lastName = friendProfile.lastName || f.last_name || '';
                 const fullName = (firstName + ' ' + lastName).trim() || f.email || 'Usuario';
-                
+
                 // Get photo from profile first, then avatar_url, then generate
                 const friendPhoto = friendProfile.photo || f.avatar_url || null;
                 let avatarSrc;
@@ -6779,12 +6908,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     const avatarSeed = friendProfile.avatarSeed || f.email || fullName;
                     avatarSrc = `https://api.dicebear.com/7.x/${friendProfile.avatarStyle || 'avataaars'}/svg?seed=${encodeURIComponent(avatarSeed)}`;
                 }
-                
+
                 const div = document.createElement('div');
                 div.className = 'routine-created__item';
                 div.style.cursor = 'pointer';
                 div.onclick = () => viewFriendStats(f.id);
-                
+
                 div.innerHTML = `
                     <div style="display:flex; align-items:center; gap:12px">
                         <img src="${avatarSrc}" style="width:40px; height:40px; border-radius:50%">
@@ -6865,7 +6994,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .maybeSingle();
 
         const friendUserData = friendData?.data || {};
-        
+
         // Get friend's name from user_data profile (same as in Perfil>Nombre) or from profiles table
         const friendProfileName = friendUserData.profile || {};
         const friendFirstName = friendProfileName.firstName || friend.first_name || '';
@@ -6954,7 +7083,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const progressPercent = Math.min(100, goal.progress || 0);
                 const progressBar = goal.completed ? '100%' : `${progressPercent}%`;
                 const goalClass = goal.completed ? 'completed' : '';
-                
+
                 let goalDescription = '';
                 switch (goal.type) {
                     case 'weight':
@@ -7036,7 +7165,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Calculate total exercises from all days
                     const totalExercises = (routine.days || []).reduce((sum, day) => sum + (day.exercises ? day.exercises.length : 0), 0);
                     const totalDays = (routine.days || []).length;
-                    
+
                     // Get all exercises from all days to display
                     const allExercises = [];
                     (routine.days || []).forEach(day => {
@@ -7048,7 +7177,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             });
                         });
                     });
-                    
+
                     return `
                         <div class="routine-created__item">
                             <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:8px">
@@ -7082,7 +7211,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Store friendId for delete and copy operations
         $('#friendStatsDialog').dataset.friendId = friendId;
-        
+
         // Store friend sessions for chart (as string for data attribute)
         const friendSessionsStr = JSON.stringify(friendSessions);
         $('#friendStatsDialog').dataset.friendSessions = friendSessionsStr;
@@ -7095,14 +7224,14 @@ document.addEventListener('DOMContentLoaded', () => {
         // Add event listeners for chart controls
         const chartTypeSelect = $('#friendChartType');
         const metricSelect = $('#friendChartMetric');
-        
+
         if (chartTypeSelect) {
             chartTypeSelect.onchange = () => {
                 const sessions = JSON.parse($('#friendStatsDialog').dataset.friendSessions || '[]');
                 drawFriendChart(sessions);
             };
         }
-        
+
         if (metricSelect) {
             metricSelect.onchange = () => {
                 const sessions = JSON.parse($('#friendStatsDialog').dataset.friendSessions || '[]');
@@ -7112,7 +7241,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         $('#friendStatsDialog').showModal();
     }
-    
+
     // Function to calculate weekly data for friend's sessions
     function weeklyDataFriend(sessions, period = 4, filter = 'all', metric = 'volume') {
         const weeks = [], values = [];
@@ -7163,15 +7292,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         return { weeks, values };
     }
-    
+
     // Function to draw friend's chart
     function drawFriendChart(friendSessions) {
         const canvas = $('#friendProgressChart');
         if (!canvas) return;
-        
+
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
-        
+
         // Resize canvas for high DPI
         const rect = canvas.getBoundingClientRect();
         const dpr = window.devicePixelRatio || 1;
@@ -7180,32 +7309,32 @@ document.addEventListener('DOMContentLoaded', () => {
         canvas.style.width = rect.width + 'px';
         canvas.style.height = rect.height + 'px';
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        
+
         const w = rect.width;
         const h = rect.height;
-        
+
         // Clear canvas
         ctx.clearRect(0, 0, w, h);
-        
+
         // Get chart type and metric
         const chartTypeSelect = $('#friendChartType');
         const metricSelect = $('#friendChartMetric');
         const chartType = chartTypeSelect ? chartTypeSelect.value : 'pie';
         const metric = metricSelect ? metricSelect.value : 'volume';
-        
+
         // Get colors from theme
         const isLight = document.documentElement.getAttribute('data-theme') === 'light';
         const barColor = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim() || '#5ea9ff';
         const lineColor = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#ff6b9d';
         const textColor = isLight ? '#1a1a1a' : '#ffffff';
         const gridColor = isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)';
-        
+
         const padding = { t: 30, r: 20, b: 40, l: 50 };
-        
+
         // Calculate weekly data
         const period = 4; // 4 weeks
         const { weeks, values } = weeklyDataFriend(friendSessions, period, 'all', metric);
-        
+
         if (chartType === 'pie') {
             drawPieChart(ctx, canvas, weeks, values, metric, barColor, textColor, gridColor);
         } else {
@@ -7319,7 +7448,7 @@ document.addEventListener('DOMContentLoaded', () => {
             save();
 
             toast('Rutina copiada exitosamente', 'ok');
-            
+
             // Refresh the dialog to show updated list
             const routinesContainer = $('#friendRoutinesList');
             if (routinesContainer) {
@@ -7335,4 +7464,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     });
+    // Initialize Event Delegation
+    setupDiaryEventDelegation();
 });

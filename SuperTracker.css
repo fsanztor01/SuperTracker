@@ -1640,6 +1640,7 @@ textarea.input:disabled {
 .exercise {
     padding: 10px;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--surface-2);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1668,13 +1669,16 @@ textarea.input:disabled {
     pointer-events: none;
 }
 
-.exercise:hover {
-    background: rgba(255, 255, 255, 0.02);
-}
+
 
 /* Enhanced light mode exercise sections */
 [data-theme="light"] .exercise {
     border-top: 1px solid rgba(225, 232, 237, 0.6);
+    background: var(--surface-2);
+}
+
+[data-theme="light"] .exercise:hover {
+    background: var(--bg2);
 }
 
 [data-theme="light"] .exercise__head {
@@ -1813,8 +1817,8 @@ textarea.input:disabled {
 }
 
 .set-card {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.03));
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: linear-gradient(135deg, rgba(0, 0, 0, 0.582), rgba(0, 0, 0, 0.582));
+    border: 1px solid rgba(0, 0, 0, 0.582);
     border-radius: var(--radius-lg);
     padding: var(--spacing-lg);
     box-shadow: var(--shadow);
@@ -1823,6 +1827,7 @@ textarea.input:disabled {
     transition: var(--transition-base);
     animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
+    will-change: transform;
 }
 
 .set-card::before {
@@ -2422,7 +2427,7 @@ dialog {
     max-height: 90vh;
 }
 
-/* Auth Screen Styles - OLED Black Background */
+/* Auth Screen Styles - Pure Black Background */
 .auth-screen {
     display: flex;
     position: fixed;
@@ -2437,6 +2442,49 @@ dialog {
     justify-content: center;
     padding: 20px;
     min-height: 100vh;
+    overflow: hidden;
+    position: relative;
+}
+
+/* Animated gradient keyframes */
+@keyframes authGradientFlow {
+    0% {
+        background-position: 0% 50%;
+    }
+
+    50% {
+        background-position: 100% 50%;
+    }
+
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+/* Subtle overlay effect */
+.auth-screen::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(ellipse at top, rgba(94, 169, 255, 0.08) 0%, transparent 60%),
+        radial-gradient(ellipse at bottom right, rgba(138, 43, 226, 0.05) 0%, transparent 50%);
+    pointer-events: none;
+    animation: pulseOverlay 8s ease-in-out infinite;
+}
+
+@keyframes pulseOverlay {
+
+    0%,
+    100% {
+        opacity: 0.6;
+    }
+
+    50% {
+        opacity: 1;
+    }
 }
 
 .auth-screen-content {
@@ -2457,9 +2505,43 @@ dialog {
     font-weight: 800;
     margin: 0 0 10px 0;
     color: var(--primary);
-    text-shadow: 0 0 20px rgba(94, 169, 255, 0.3);
+    /* Reduced glow intensity with theme color */
+    text-shadow: 0 0 15px var(--primary),
+        0 0 25px var(--primary);
     letter-spacing: -0.5px;
-    transition: color 0.3s ease;
+    transition: color 0.3s ease, text-shadow 0.3s ease;
+    animation: textGlowTheme 3s ease-in-out infinite;
+    position: relative;
+    background: linear-gradient(90deg, var(--primary), #fff, var(--primary));
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: textGlowTheme 3s ease-in-out infinite, shimmer 4s linear infinite;
+}
+
+/* Glowing pulsing effect with theme color */
+@keyframes textGlowTheme {
+
+    0%,
+    100% {
+        filter: brightness(1) drop-shadow(0 0 10px var(--primary));
+    }
+
+    50% {
+        filter: brightness(1.15) drop-shadow(0 0 18px var(--primary));
+    }
+}
+
+/* Shimmer effect that moves across the text */
+@keyframes shimmer {
+    0% {
+        background-position: -200% center;
+    }
+
+    100% {
+        background-position: 200% center;
+    }
 }
 
 .auth-brand p {
@@ -5235,5 +5317,98 @@ details>summary::-webkit-details-marker {
     .chart-controls {
         display: grid;
         grid-template-columns: 1fr;
+    }
+}
+
+/* ==================== PERFORMANCE OPTIMIZATIONS FOR WEBVIEW ==================== */
+/* Optimize animations and repaints for better performance in Android WebView */
+
+/* Use GPU acceleration for frequently animated elements */
+.session.card,
+.set-card,
+.exercise {
+    will-change: transform;
+    transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+}
+
+/* Contain paint and layout for better performance */
+.sessions {
+    contain: layout style paint;
+}
+
+.session.card {
+    contain: layout paint;
+}
+
+.set-card {
+    contain: layout paint;
+}
+
+/* Content Visibility for off-screen content optimization */
+.day-panel {
+    content-visibility: auto;
+    contain-intrinsic-size: 100px 500px;
+    /* Estimate size to prevent scrollbar jumping */
+}
+
+/* Reduce animation complexity on mobile/webview */
+@media (max-width: 767px) {
+
+    .session.card,
+    .set-card,
+    .exercise {
+        animation-duration: 0.2s;
+        /* Disable backdrop-filter on mobile for massive performance gain */
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+
+    /* Simplify hover effects on mobile to reduce repaints */
+    .set-card:hover::before,
+    .exercise:hover {
+        transition: none;
+    }
+
+    /* Simplify shadows on mobile */
+    .card,
+    .set-card,
+    .btn {
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+    }
+}
+
+/* Optimize scroll performance */
+.panel,
+.sessions,
+.sets-container {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+}
+
+/* Batch animations to reduce layout thrashing */
+.session.card:nth-child(n+10) {
+    animation: none;
+}
+
+.sets-container .set-card:nth-child(n+8) {
+    animation: none;
+}
+
+/* Optimize font rendering */
+body {
+    font-synthesis: none;
+    font-feature-settings: 'liga' on;
+    -moz-font-feature-settings: 'liga' on;
+    text-rendering: optimizeSpeed;
+}
+
+/* Force GPU compositing for smooth scrolling */
+@supports (will-change: transform) {
+
+    .auth-screen,
+    .auth-screen::before {
+        will-change: opacity;
     }
 }
