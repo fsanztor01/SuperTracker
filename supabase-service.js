@@ -91,7 +91,18 @@ class SupabaseService {
                 email,
                 password
             });
-            if (error) throw error;
+            if (error) {
+                // Check if error is about email not confirmed
+                if (error.message && (error.message.includes('email') && error.message.includes('confirm')) || 
+                    error.message.includes('Email not confirmed') ||
+                    error.status === 400) {
+                    // Return data with user but no session to indicate email not confirmed
+                    if (data && data.user) {
+                        return { user: data.user, session: null };
+                    }
+                }
+                throw error;
+            }
             return data;
         } catch (error) {
             console.error('Sign in error:', error);
