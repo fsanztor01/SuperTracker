@@ -110,6 +110,24 @@ class SupabaseService {
         }
     }
 
+    async resetPassword(email) {
+        const available = await this.isAvailable();
+        if (!available || !supabase || !supabase.auth) {
+            throw new Error('Supabase not configured');
+        }
+        try {
+            const normalizedEmail = email.trim().toLowerCase();
+            const { data, error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+                redirectTo: `${window.location.origin}/reset-password`
+            });
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error('Reset password error:', error);
+            throw error;
+        }
+    }
+
     async getSession() {
         const available = await this.isAvailable();
         if (!available || !supabase || !supabase.auth) return null;
