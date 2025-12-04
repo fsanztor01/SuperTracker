@@ -1405,7 +1405,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const field = target.classList.contains('js-kg') ? 'kg' :
                 target.classList.contains('js-reps') ? 'reps' : 'rir';
 
-            updateSet(sessionId, exId, setId, field, target.value);
+            updateSetData(sessionId, exId, setId, field, target.value);
         }, 500));
     }
 
@@ -1583,18 +1583,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const details = document.createElement('details');
             details.className = 'day-panel card pop';
-            // Add completed class to details if session is completed
-            details.classList.toggle('completed', !!session.completed);
             // Store dayKey and sessionId so we can restore open state later
             details.dataset.dayKey = dayKey;
             details.dataset.sessionId = sessionId;
 
             // Restore previous user state if available; otherwise only open the "current" session
-            // BUT: completed sessions should be closed (collapsed) by default
-            if (session.completed) {
-                // Completed sessions should be closed (collapsed)
-                details.open = false;
-            } else if (hadPrev) {
+            if (hadPrev) {
                 details.open = prevOpen.has(dayKey) || prevOpen.has(sessionId);
             } else {
                 // Only expand the current day
@@ -1629,29 +1623,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Render the session card
             const card = $('#tpl-session').content.firstElementChild.cloneNode(true);
             card.dataset.id = session.id;
-            
-            // Remove existing completed class and badge first
-            card.classList.remove('completed');
-            const existingBadge = card.querySelector('.badge-done');
-            if (existingBadge) {
-                existingBadge.remove();
-            }
-            
-            // Apply completed class and badge if session is completed
-            if (session.completed) {
-                card.classList.add('completed');
-                // Force style recalculation
-                void card.offsetHeight;
-                
-                const badge = document.createElement('span');
-                badge.className = 'badge-done';
-                badge.textContent = 'Completada ✓';
-                const titleWrap = card.querySelector('.session__titlewrap');
-                if (titleWrap) {
-                    titleWrap.appendChild(badge);
-                }
-            }
-            
+            card.classList.toggle('completed', !!session.completed);
             card.querySelector('.session__title').textContent = session.name;
             card.querySelector('.session__date').textContent = new Date(session.date).toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
             const dateEl = card.querySelector('.session__date');
@@ -1660,8 +1632,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 dateEl.style.display = 'none';
             }
             const btnComplete = card.querySelector('.js-complete');
-            if (btnComplete) {
-                btnComplete.setAttribute('aria-pressed', String(!!session.completed));
+            btnComplete.setAttribute('aria-pressed', String(!!session.completed));
+            if (session.completed) {
+                const badge = document.createElement('span');
+                badge.className = 'badge-done';
+                badge.textContent = 'Completada ✓';
+                card.querySelector('.session__titlewrap').appendChild(badge);
             }
 
             const body = card.querySelector('.session__body');
@@ -1720,9 +1696,6 @@ document.addEventListener('DOMContentLoaded', () => {
         // Append fragment to container in one operation (single reflow)
         container.innerHTML = '';
         container.appendChild(fragment);
-        
-        // Force a reflow to ensure styles are applied immediately
-        void container.offsetHeight;
     }
     function renderExercise(session, ex) {
         const block = $('#tpl-exercise').content.firstElementChild.cloneNode(true);
@@ -2227,6 +2200,27 @@ document.addEventListener('DOMContentLoaded', () => {
         const reps = parseReps(currentSet.reps);
         const volume = kg * reps;
 
+        // Calculate historical max values from all sessions
+        let maxKg = 0;
+        let maxVolume = 0;
+        const maxRepsByKg = {};
+
+        app.sessions.forEach(s => {
+            const ex = (s.exercises || []).find(e => e.name === exerciseName);
+            if (!ex) return;
+            (ex.sets || []).forEach(st => {
+                if (st.id === setId) return; // Skip current set
+                const stKg = parseFloat(st.kg) || 0;
+                const stReps = parseReps(st.reps);
+                const stVolume = stKg * stReps;
+                if (stKg > maxKg) maxKg = stKg;
+                if (stVolume > maxVolume) maxVolume = stVolume;
+                if (stKg > 0 && (!maxRepsByKg[stKg] || stReps > maxRepsByKg[stKg])) {
+                    maxRepsByKg[stKg] = stReps;
+                }
+            });
+        });
+
         // Initialize PR data if needed
         if (!app.prs[exerciseName]) {
             app.prs[exerciseName] = { maxKg: 0, maxVolume: 0, maxRepsByKg: {} };
@@ -2236,9 +2230,8 @@ document.addEventListener('DOMContentLoaded', () => {
         let prDetected = false;
         let prType = '';
 
-        // Check PR weight - Compare against STORED max, not just session max
-        // This prevents false notifications when saving an existing session
-        if (kg > (prData.maxKg || 0)) {
+        // Check PR weight
+        if (kg > maxKg) {
             prData.maxKg = kg;
             prDetected = true;
             prType = 'weight';
@@ -2247,7 +2240,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Check PR volume
-        if (volume > (prData.maxVolume || 0)) {
+        if (volume > maxVolume) {
             prData.maxVolume = volume;
             prDetected = true;
             prType = prType ? 'multiple' : 'volume';
@@ -2260,7 +2253,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Check PR reps with same weight
-        if (kg > 0 && (!prData.maxRepsByKg?.[kg] || reps > prData.maxRepsByKg[kg])) {
+        if (kg > 0 && (!maxRepsByKg[kg] || reps > maxRepsByKg[kg])) {
             if (!prData.maxRepsByKg) prData.maxRepsByKg = {};
             prData.maxRepsByKg[kg] = reps;
             if (!prDetected) {
@@ -2272,7 +2265,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (prDetected) {
-            // Save immediately to persist the new PR record
             save();
             toast(`🏆 Nuevo PR de ${prType === 'weight' ? 'peso' : prType === 'volume' ? 'volumen' : 'repeticiones'} en ${exerciseName}!`, 'ok');
         }
@@ -3397,11 +3389,11 @@ document.addEventListener('DOMContentLoaded', () => {
             sessionCard.classList.remove('fiesta-celebration');
         }, 600);
 
-        // Create level-up notification with session name and date
-        createLevelUpNotification(session.name, session.date);
+        // Create level-up notification with session name
+        createLevelUpNotification(session.name);
     }
 
-    function createLevelUpNotification(sessionName, sessionDate = null) {
+    function createLevelUpNotification(sessionName) {
         // Check if user prefers reduced motion
         if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
             return;
@@ -3418,22 +3410,13 @@ document.addEventListener('DOMContentLoaded', () => {
         notification.id = 'levelUpNotification';
         notification.className = 'level-up-notification';
 
-        // Format date for notification
-        let dayText = 'COMPLETADO';
-        if (sessionDate) {
-            const date = parseLocalDate(sessionDate);
-            const dayNumber = date.getDate();
-            const monthName = date.toLocaleDateString('es-ES', { month: 'long' });
-            dayText = `Día ${dayNumber} de ${monthName} completado`;
-        }
-
         // Create content
         notification.innerHTML = `
             <div class="level-up-content">
                 <div class="level-up-icon">✓</div>
                 <div class="level-up-text">
                     <div class="level-up-title">${escapeHtml(sessionName)}</div>
-                    <div class="level-up-subtitle">${dayText}</div>
+                    <div class="level-up-subtitle">COMPLETADO</div>
                 </div>
             </div>
         `;
@@ -3462,7 +3445,49 @@ document.addEventListener('DOMContentLoaded', () => {
         const wasCompleted = s.completed;
         s.completed = !s.completed;
 
-        // Force UI update immediately
+        // Auto-update date to today if completing a past session
+        if (s.completed && !wasCompleted) {
+            const sessionDate = parseLocalDate(s.date);
+            sessionDate.setHours(0, 0, 0, 0);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            // If session date is in the past, update it to today
+            if (sessionDate < today) {
+                s.date = toLocalISO(today);
+            }
+        }
+
+        try {
+            await save();
+
+            // Also update in sessions table
+            if (typeof supabaseService !== 'undefined') {
+                const isAvailable = await supabaseService.isAvailable();
+                if (isAvailable) {
+                    try {
+                        await supabaseService.saveSession(s);
+                    } catch (error) {
+                        console.warn('Error actualizando sesión completada en tabla sessions:', error);
+                        // Continue even if sessions table update fails
+                    }
+                }
+            }
+        } catch (error) {
+            // Revert the change if save failed
+            s.completed = wasCompleted;
+            throw error;
+        }
+
+        // Update competitive mode stats
+        updateStreak();
+        updateWeeklyGoal();
+        checkAchievements();
+        // Update goals progress
+        if (app.goals && app.goals.length > 0) {
+            app.goals.forEach(goal => updateGoalProgress(goal));
+            save();
+        }
         refresh();
 
         // Trigger celebration animation if session was just completed (not uncompleted)
@@ -3471,41 +3496,6 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => {
                 triggerFiestaCelebration(id);
             }, 100);
-        }
-
-        // Save to both user_data and sessions table (non-blocking, don't wait)
-        save().catch(error => {
-            console.warn('Error guardando sesión completada:', error);
-            // Revert the change if save failed
-            s.completed = wasCompleted;
-            refresh(); // Revert UI
-            toast('Error al guardar el estado de la sesión', 'err');
-        });
-
-        // Also update in sessions table (non-blocking)
-        if (typeof supabaseService !== 'undefined') {
-            supabaseService.isAvailable().then(isAvailable => {
-                if (isAvailable) {
-                    supabaseService.saveSession(s).catch(error => {
-                        console.warn('Error actualizando sesión completada en tabla sessions:', error);
-                        // Continue even if sessions table update fails
-                    });
-                }
-            });
-        }
-
-        // Update competitive mode stats
-        updateStreak();
-        updateWeeklyGoal();
-        checkAchievements();
-        
-        // Update goals progress
-        if (app.goals && app.goals.length > 0) {
-            app.goals.forEach(goal => updateGoalProgress(goal));
-            // Save again after updating goals (like TrainTracker does)
-            save().catch(error => {
-                console.warn('Error guardando goals actualizados:', error);
-            });
         }
     }
     function addExercise(sessionId, name) {
@@ -5221,7 +5211,7 @@ document.addEventListener('DOMContentLoaded', () => {
         toast(`Plantilla «${key}» importada en la semana visible`, 'ok');
     }
 
-    async function importRoutineIntoWeek(routineId) {
+    function importRoutineIntoWeek(routineId) {
         const routine = app.routines.find(r => r.id === routineId);
         if (!routine) {
             toast('Rutina no encontrada', 'err');
@@ -5255,32 +5245,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }));
 
         app.sessions = [...app.sessions, ...toAdd];
-
-        // Save to both user_data and sessions table
-        try {
-            await save();
-            // Also save to sessions table
-            if (typeof supabaseService !== 'undefined' && toAdd.length > 0) {
-                const isAvailable = await supabaseService.isAvailable();
-                if (isAvailable) {
-                    // Save all sessions to sessions table in parallel
-                    const savePromises = toAdd.map(session =>
-                        supabaseService.saveSession(session).catch(error => {
-                            console.warn(`Error guardando sesión ${session.id} en tabla sessions:`, error);
-                            return null; // Continue even if one fails
-                        })
-                    );
-                    await Promise.all(savePromises);
-                }
-            }
-        } catch (error) {
-            // Remove from app.sessions if save failed
-            app.sessions = app.sessions.filter(s => !toAdd.some(ta => ta.id === s.id));
-            console.error('Error al importar rutina:', error);
-            toast('Error al importar la rutina', 'err');
-            return;
-        }
-
+        save();
         refresh();
         toast(`Rutina «${routine.name}» importada en la semana visible`, 'ok');
     }
@@ -6176,44 +6141,28 @@ document.addEventListener('DOMContentLoaded', () => {
         const signupFields = $('#signupFields');
         const firstNameInput = $('#authFirstName');
         const lastNameInput = $('#authLastName');
-        const forgotPasswordBtn = $('#btnForgotPassword');
-        const confirmPasswordField = $('#confirmPasswordField');
-        const confirmPasswordInput = $('#authConfirmPassword');
 
         if (tab === 'signin') {
             if (submitBtn) submitBtn.textContent = 'Iniciar Sesión';
             if (signupFields) signupFields.style.display = 'none';
-            if (confirmPasswordField) confirmPasswordField.style.display = 'none';
             if (firstNameInput) firstNameInput.removeAttribute('required');
             if (lastNameInput) lastNameInput.removeAttribute('required');
-            if (confirmPasswordInput) confirmPasswordInput.removeAttribute('required');
-            if (forgotPasswordBtn) forgotPasswordBtn.style.display = 'block';
         } else {
             if (submitBtn) submitBtn.textContent = 'Registrarse';
             if (signupFields) signupFields.style.display = 'block';
-            if (confirmPasswordField) confirmPasswordField.style.display = 'block';
             if (firstNameInput) firstNameInput.setAttribute('required', 'required');
             if (lastNameInput) lastNameInput.setAttribute('required', 'required');
-            if (confirmPasswordInput) confirmPasswordInput.setAttribute('required', 'required');
-            if (forgotPasswordBtn) forgotPasswordBtn.style.display = 'none';
         }
     }
 
     async function handleAuth(e) {
         if (e) e.preventDefault();
 
-        const activeTab = $('.auth-tab-btn.active')?.dataset.tab || 'signin';
-
         // Clear previous messages
         const errorDiv = $('#authError');
         const successDiv = $('#authSuccess');
-        const emailConfirmationMsg = $('#emailConfirmationMessage');
         if (errorDiv) errorDiv.style.display = 'none';
         if (successDiv) successDiv.style.display = 'none';
-        // Hide email confirmation message when user tries to login
-        if (activeTab === 'signin' && emailConfirmationMsg) {
-            emailConfirmationMsg.style.display = 'none';
-        }
 
         if (typeof supabaseService === 'undefined') {
             if (errorDiv) {
@@ -6225,9 +6174,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const email = $('#authEmail')?.value.trim();
         const password = $('#authPassword')?.value;
-        const confirmPassword = $('#authConfirmPassword')?.value;
         const firstName = $('#authFirstName')?.value.trim();
         const lastName = $('#authLastName')?.value.trim();
+        const activeTab = $('.auth-tab-btn.active')?.dataset.tab || 'signin';
         
         // Ensure form state is correct before validation
         updateAuthForm(activeTab);
@@ -6259,33 +6208,31 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 return;
             }
-            
-            // Validate password confirmation
-            if (!confirmPassword) {
-                if (errorDiv) {
-                    errorDiv.textContent = 'Por favor confirma tu contraseña';
-                    errorDiv.style.display = 'block';
-                }
-                return;
-            }
-            
-            if (password !== confirmPassword) {
-                if (errorDiv) {
-                    errorDiv.textContent = 'Las contraseñas no coinciden';
-                    errorDiv.style.display = 'block';
-                }
-                return;
-            }
         }
 
         try {
             let result;
             if (activeTab === 'signin') {
                 result = await supabaseService.signIn(email, password);
-                
-                // Check if login was successful
-                if (result && result.session) {
-                    // Email confirmed, proceed to app
+            } else {
+                result = await supabaseService.signUp(email, password, {
+                    firstName: firstName,
+                    lastName: lastName
+                });
+                if (result) {
+                    // Save user profile data
+                    if (result.user) {
+                        app.profile.firstName = firstName;
+                        app.profile.lastName = lastName;
+                        app.profile.email = email;
+                        await save();
+                    }
+                }
+            }
+
+            if (result) {
+                // Load user profile if signing in
+                if (activeTab === 'signin') {
                     await load();
                     // Try to get user metadata from Supabase
                     const user = await supabaseService.getCurrentUser();
@@ -6295,130 +6242,26 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (user.email) app.profile.email = user.email;
                         await save();
                     }
+                }
 
-                    hideAuthScreen();
-                    showMainApp();
-                    setupAuthUI(true);
-                    await setupRealtimeSync();
-                    // Reload data from Supabase
-                    await load();
-                    // Initialize app if not already done
-                    bindEvents();
-                    render();
-                    updateStreak();
-                    updateWeeklyGoal();
-                    checkAchievements();
-                    // Fix: Only show toast once, check if already shown
-                    if (!window.sessionToastShown) {
-                        toast('Sesión iniciada correctamente', 'ok');
-                        window.sessionToastShown = true;
-                        // Reset flag after 2 seconds
-                        setTimeout(() => { window.sessionToastShown = false; }, 2000);
-                    }
-                } else if (result && result.user && !result.session) {
-                    // User exists but email not confirmed
-                    if (errorDiv) {
-                        errorDiv.textContent = 'Por favor confirma tu email antes de iniciar sesión. Revisa tu bandeja de entrada.';
-                        errorDiv.style.display = 'block';
-                    }
-                    // Clear password field
-                    const passwordInput = $('#authPassword');
-                    if (passwordInput) passwordInput.value = '';
-                    return; // Don't proceed
-                } else if (!result || !result.session) {
-                    // No session - this shouldn't happen if login was successful, but handle it
-                    if (errorDiv) {
-                        errorDiv.textContent = 'No se pudo iniciar sesión. Verifica tus credenciales o confirma tu email.';
-                        errorDiv.style.display = 'block';
-                    }
-                    return;
-                }
-            } else {
-                // Sign up
-                result = await supabaseService.signUp(email, password, {
-                    firstName: firstName,
-                    lastName: lastName
-                });
-                
-                if (result) {
-                    // Check if email confirmation is required
-                    if (result.user && !result.session) {
-                        // Email confirmation required - show success message first
-                        toast('Confirmación enviada', 'ok');
-                        
-                        // Clear error messages
-                        if (errorDiv) errorDiv.style.display = 'none';
-                        const successDiv = $('#authSuccess');
-                        if (successDiv) successDiv.style.display = 'none';
-                        
-                        // Reset form
-                        const authForm = $('#authForm');
-                        if (authForm) {
-                            authForm.reset();
-                            // Clear confirm password field
-                            const confirmPasswordInput = $('#authConfirmPassword');
-                            if (confirmPasswordInput) confirmPasswordInput.value = '';
-                        }
-                        
-                        // Switch to login tab FIRST
-                        const signinTab = $('.auth-tab-btn[data-tab="signin"]');
-                        const signupTab = $('.auth-tab-btn[data-tab="signup"]');
-                        if (signinTab && signupTab) {
-                            signinTab.classList.add('active');
-                            signupTab.classList.remove('active');
-                            updateAuthForm('signin');
-                        }
-                        
-                        // Pre-fill email in login form
-                        const emailInput = $('#authEmail');
-                        if (emailInput) emailInput.value = email;
-                        
-                        // Show email confirmation message below "Iniciar Sesión" AFTER switching tabs
-                        // Use a small delay to ensure the tab switch is complete
-                        setTimeout(() => {
-                            const emailConfirmationMsg = $('#emailConfirmationMessage');
-                            if (emailConfirmationMsg) {
-                                emailConfirmationMsg.style.display = 'block';
-                            }
-                        }, 100);
-                        
-                        return; // Don't proceed to login
-                    } else if (result.user && result.session) {
-                        // Email already confirmed (shouldn't happen normally, but handle it)
-                        // Save user profile data
-                        app.profile.firstName = firstName;
-                        app.profile.lastName = lastName;
-                        app.profile.email = email;
-                        await save();
-                        
-                        // Proceed to app
-                        hideAuthScreen();
-                        showMainApp();
-                        setupAuthUI(true);
-                        await setupRealtimeSync();
-                        await load();
-                        bindEvents();
-                        render();
-                        updateStreak();
-                        updateWeeklyGoal();
-                        checkAchievements();
-                        if (!window.sessionToastShown) {
-                            toast('Sesión iniciada correctamente', 'ok');
-                            window.sessionToastShown = true;
-                            setTimeout(() => { window.sessionToastShown = false; }, 2000);
-                        }
-                    }
-                }
+                hideAuthScreen();
+                showMainApp();
+                setupAuthUI(true);
+                await setupRealtimeSync();
+                // Reload data from Supabase
+                await load();
+                // Initialize app if not already done
+                bindEvents();
+                render();
+                updateStreak();
+                updateWeeklyGoal();
+                checkAchievements();
+                toast('Sesión iniciada correctamente', 'ok');
             }
         } catch (error) {
             console.error('Auth error:', error);
             if (errorDiv) {
-                // Check if error is about email not confirmed
-                if (error.message && (error.message.includes('email') && error.message.includes('confirm'))) {
-                    errorDiv.textContent = 'Por favor confirma tu email antes de iniciar sesión. Revisa tu bandeja de entrada.';
-                } else {
-                    errorDiv.textContent = error.message || 'Error al autenticarse';
-                }
+                errorDiv.textContent = error.message || 'Error al autenticarse';
                 errorDiv.style.display = 'block';
             }
         }
@@ -6478,13 +6321,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Clear error and success messages when switching tabs
                 const errorDiv = $('#authError');
                 const successDiv = $('#authSuccess');
-                const emailConfirmationMsg = $('#emailConfirmationMessage');
                 if (errorDiv) errorDiv.style.display = 'none';
                 if (successDiv) successDiv.style.display = 'none';
-                // Hide email confirmation message when switching tabs (user can see it again if needed)
-                if (tab.dataset.tab === 'signup' && emailConfirmationMsg) {
-                    emailConfirmationMsg.style.display = 'none';
-                }
             });
         });
 
@@ -7019,20 +6857,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
         // 2. Load Pending Requests
-        const { data: requestsRaw } = await supabase
+        const { data: requests } = await supabase
             .from(TABLE_FRIEND_REQUESTS)
             .select('*, sender:profiles!sender_id(*)')
             .eq('receiver_id', user.id)
             .eq('status', 'pending');
-
-        // Fix: Remove duplicates by request ID
-        const seenRequestIds = new Set();
-        const requests = (requestsRaw || []).filter(req => {
-            if (!req || !req.id) return false;
-            if (seenRequestIds.has(req.id)) return false;
-            seenRequestIds.add(req.id);
-            return true;
-        });
 
         const reqList = $('#pendingRequestsList');
         reqList.innerHTML = '';
@@ -7091,39 +6920,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .eq('receiver_id', user.id)
             .eq('status', 'accepted');
 
-        // Fix: Remove duplicates by friend ID - more robust filtering
-        const allFriendsRaw = [];
-        
-        // Add friends from first query (where I am sender)
-        if (friends1 && Array.isArray(friends1)) {
-            friends1.forEach(r => {
-                if (r && r.friend && r.friend.id) {
-                    allFriendsRaw.push(r.friend);
-                }
-            });
-        }
-        
-        // Add friends from second query (where I am receiver)
-        if (friends2 && Array.isArray(friends2)) {
-            friends2.forEach(r => {
-                if (r && r.friend && r.friend.id) {
-                    allFriendsRaw.push(r.friend);
-                }
-            });
-        }
-        
-        // Remove duplicates by friend ID
-        const seenFriendIds = new Set();
-        const allFriends = allFriendsRaw.filter(f => {
-            if (!f || !f.id) return false;
-            const friendId = String(f.id); // Convert to string for consistent comparison
-            if (seenFriendIds.has(friendId)) {
-                console.log('Duplicate friend filtered:', f.id, f.email);
-                return false;
-            }
-            seenFriendIds.add(friendId);
-            return true;
-        });
+        const allFriends = [...(friends1 || []).map(r => r.friend), ...(friends2 || []).map(r => r.friend)];
 
         const friendsList = $('#friendsList');
         friendsList.innerHTML = '';
@@ -7641,34 +7438,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const user = await supabaseService.getCurrentUser();
             if (!user) return;
 
-            // Delete friendship (both directions) - use proper PostgREST syntax
-            try {
-                // Delete where user is sender and friend is receiver
-                const { error: error1 } = await supabase
-                    .from(TABLE_FRIEND_REQUESTS)
-                    .delete()
-                    .eq('sender_id', user.id)
-                    .eq('receiver_id', friendId)
-                    .eq('status', 'accepted');
+            // Delete friendship (both directions)
+            const { error } = await supabase
+                .from(TABLE_FRIEND_REQUESTS)
+                .delete()
+                .or(`and(sender_id.eq.${user.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${user.id})`);
 
-                // Delete where friend is sender and user is receiver
-                const { error: error2 } = await supabase
-                    .from(TABLE_FRIEND_REQUESTS)
-                    .delete()
-                    .eq('sender_id', friendId)
-                    .eq('receiver_id', user.id)
-                    .eq('status', 'accepted');
-
-                if (error1 || error2) {
-                    console.error('Error deleting friend:', error1 || error2);
-                    toast('Error al eliminar amigo', 'err');
-                } else {
-                    toast('Amigo eliminado', 'ok');
-                    $('#friendStatsDialog').close();
-                    loadSocialData();
-                }
-            } catch (err) {
-                console.error('Error deleting friend:', err);
+            if (!error) {
+                toast('Amigo eliminado', 'ok');
+                $('#friendStatsDialog').close();
+                loadSocialData();
+            } else {
                 toast('Error al eliminar amigo', 'err');
             }
         }
