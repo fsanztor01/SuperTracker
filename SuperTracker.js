@@ -1637,19 +1637,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 existingBadge.remove();
             }
             
-            // Apply completed class and badge if session is completed
+            // Apply completed class if session is completed (badge removed per user request)
             if (session.completed) {
                 card.classList.add('completed');
                 // Force style recalculation
                 void card.offsetHeight;
-                
-                const badge = document.createElement('span');
-                badge.className = 'badge-done';
-                badge.textContent = 'Completada ✓';
-                const titleWrap = card.querySelector('.session__titlewrap');
-                if (titleWrap) {
-                    titleWrap.appendChild(badge);
-                }
             }
             
             card.querySelector('.session__title').textContent = session.name;
