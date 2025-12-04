@@ -806,6 +806,24 @@ document.addEventListener('DOMContentLoaded', () => {
     /* =================== Persistencia =================== */
     // Save data ONLY to Supabase - requires authentication
     async function save() {
+        // Check if user is authenticated before attempting to save
+        if (typeof supabaseService !== 'undefined') {
+            const isAvailable = await supabaseService.isAvailable();
+            if (isAvailable) {
+                const user = await supabaseService.getCurrentUser();
+                if (!user) {
+                    // User not authenticated - silently skip save (no errors)
+                    return Promise.resolve();
+                }
+            } else {
+                // Supabase not available - silently skip save
+                return Promise.resolve();
+            }
+        } else {
+            // Supabase not configured - silently skip save
+            return Promise.resolve();
+        }
+
         const payload = {
             sessions: app.sessions,
             routines: app.routines,
@@ -830,22 +848,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     await supabaseService.saveUserData(payload);
                     // Success - data saved to Supabase
                 } catch (error) {
-                    console.error('Error guardando en Supabase:', error);
-                    const errorMessage = error.message || 'Error al guardar los datos';
-                    toast(errorMessage, 'err');
-                    throw error; // Re-throw to let caller handle it
+                    // Only show error if it's not an authentication issue
+                    if (error.message && !error.message.includes('no autenticado')) {
+                        console.error('Error guardando en Supabase:', error);
+                        const errorMessage = error.message || 'Error al guardar los datos';
+                        toast(errorMessage, 'err');
+                    }
+                    // Don't throw error for authentication issues - just resolve silently
+                    if (error.message && error.message.includes('no autenticado')) {
+                        return Promise.resolve();
+                    }
+                    throw error; // Re-throw other errors
                 }
             } else {
-                const errorMsg = 'Supabase no está disponible. Debes iniciar sesión para guardar datos.';
-                console.error(errorMsg);
-                toast(errorMsg, 'err');
-                throw new Error(errorMsg);
+                // Supabase not available - silently return
+                return Promise.resolve();
             }
         } else {
-            const errorMsg = 'Supabase no está configurado. No se pueden guardar los datos.';
-            console.error(errorMsg);
-            toast(errorMsg, 'err');
-            throw new Error(errorMsg);
+            // Supabase not configured - silently return
+            return Promise.resolve();
         }
     }
 
@@ -4585,7 +4606,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let currentAngle = -Math.PI / 2;
 
-        // Premium palette
+        // Premium palette - fixed colors for consistent mapping
         const colors = [
             barColor,
             '#10b981', // Emerald
@@ -4599,12 +4620,20 @@ document.addEventListener('DOMContentLoaded', () => {
             '#14b8a6'  // Teal
         ];
 
-        // Draw slices
-        values.forEach((val, i) => {
-            if (val === 0) return;
+        // Create filtered arrays with indices to maintain color consistency
+        const dataWithIndices = values.map((val, i) => ({
+            value: val,
+            weekIndex: i,
+            week: weeks[i]
+        })).filter(item => item.value > 0);
 
+        // Draw slices
+        dataWithIndices.forEach((item, sliceIndex) => {
+            const val = item.value;
+            const weekIndex = item.weekIndex;
             const sliceAngle = (val / total) * 2 * Math.PI;
-            const color = colors[i % colors.length];
+            // Use weekIndex to maintain consistent color mapping
+            const color = colors[weekIndex % colors.length];
 
             // Add gap
             const gap = 0.02;
@@ -4641,16 +4670,18 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.textBaseline = 'middle';
         ctx.font = '11px Inter, system-ui, sans-serif';
 
-        values.forEach((val, i) => {
-            if (val === 0) return;
+        dataWithIndices.forEach((item, legendIndex) => {
+            const val = item.value;
+            const weekIndex = item.weekIndex;
+            const label = item.week;
 
-            const y = legendY + i * lineHeight;
+            const y = legendY + legendIndex * lineHeight;
             // Don't draw if out of bounds
             if (y > h - 20) return;
 
-            const color = colors[i % colors.length];
+            // Use the same weekIndex to get the same color as the slice
+            const color = colors[weekIndex % colors.length];
             const percentage = ((val / total) * 100).toFixed(1) + '%';
-            const label = weeks[i];
 
             // Color dot
             ctx.fillStyle = color;
@@ -6127,8 +6158,13 @@ document.addEventListener('DOMContentLoaded', () => {
     async function handleAuth(e) {
         if (e) e.preventDefault();
 
+        // Clear previous messages
+        const errorDiv = $('#authError');
+        const successDiv = $('#authSuccess');
+        if (errorDiv) errorDiv.style.display = 'none';
+        if (successDiv) successDiv.style.display = 'none';
+
         if (typeof supabaseService === 'undefined') {
-            const errorDiv = $('#authError');
             if (errorDiv) {
                 errorDiv.textContent = 'Supabase no está configurado';
                 errorDiv.style.display = 'block';
@@ -6140,8 +6176,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const password = $('#authPassword')?.value;
         const firstName = $('#authFirstName')?.value.trim();
         const lastName = $('#authLastName')?.value.trim();
-        const errorDiv = $('#authError');
         const activeTab = $('.auth-tab-btn.active')?.dataset.tab || 'signin';
+        
+        // Ensure form state is correct before validation
+        updateAuthForm(activeTab);
 
         // Validate email domain
         if (email && !validateEmail(email)) {
@@ -6269,6 +6307,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Bind auth events
     function bindAuthEvents() {
+        // Initialize form state based on active tab
+        const activeTab = $('.auth-tab-btn.active')?.dataset.tab || 'signin';
+        updateAuthForm(activeTab);
+        
         // Auth tabs
         const authTabs = $$('.auth-tab-btn');
         authTabs.forEach(tab => {
@@ -6276,9 +6318,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 authTabs.forEach(t => t.classList.remove('active'));
                 tab.classList.add('active');
                 updateAuthForm(tab.dataset.tab);
-                // Clear error message when switching tabs
+                // Clear error and success messages when switching tabs
                 const errorDiv = $('#authError');
+                const successDiv = $('#authSuccess');
                 if (errorDiv) errorDiv.style.display = 'none';
+                if (successDiv) successDiv.style.display = 'none';
             });
         });
 
