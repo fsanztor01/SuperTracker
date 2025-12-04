@@ -805,44 +805,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     /* =================== Persistencia =================== */
     // Save data ONLY to Supabase - requires authentication
-    // Optimized with debouncing to prevent multiple rapid saves
-    let saveTimeout = null;
-    let savePromise = null;
-    let pendingSave = false;
-    
-    async function save(immediate = false) {
-        // If immediate, save right away
-        if (immediate) {
-            if (saveTimeout) {
-                clearTimeout(saveTimeout);
-                saveTimeout = null;
-            }
-            return performSave();
-        }
-        
-        // Debounce: Wait 500ms before saving to batch multiple saves
-        pendingSave = true;
-        
-        return new Promise((resolve, reject) => {
-            if (saveTimeout) {
-                clearTimeout(saveTimeout);
-            }
-            
-            saveTimeout = setTimeout(async () => {
-                if (pendingSave) {
-                    pendingSave = false;
-                    try {
-                        const result = await performSave();
-                        resolve(result);
-                    } catch (error) {
-                        reject(error);
-                    }
-                }
-            }, 500);
-        });
-    }
-    
-    async function performSave() {
+    async function save() {
         const payload = {
             sessions: app.sessions,
             routines: app.routines,
@@ -864,16 +827,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const isAvailable = await supabaseService.isAvailable();
             if (isAvailable) {
                 try {
-                    // If there's already a save in progress, wait for it
-                    if (savePromise) {
-                        await savePromise;
-                    }
-                    savePromise = supabaseService.saveUserData(payload);
-                    await savePromise;
-                    savePromise = null;
+                    await supabaseService.saveUserData(payload);
                     // Success - data saved to Supabase
                 } catch (error) {
-                    savePromise = null;
                     console.error('Error guardando en Supabase:', error);
                     const errorMessage = error.message || 'Error al guardar los datos';
                     toast(errorMessage, 'err');
@@ -3481,8 +3437,26 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // Update UI immediately for better responsiveness
-        refresh({ preserveTab: true });
+        try {
+            await save();
+
+            // Also update in sessions table
+            if (typeof supabaseService !== 'undefined') {
+                const isAvailable = await supabaseService.isAvailable();
+                if (isAvailable) {
+                    try {
+                        await supabaseService.saveSession(s);
+                    } catch (error) {
+                        console.warn('Error actualizando sesión completada en tabla sessions:', error);
+                        // Continue even if sessions table update fails
+                    }
+                }
+            }
+        } catch (error) {
+            // Revert the change if save failed
+            s.completed = wasCompleted;
+            throw error;
+        }
 
         // Update competitive mode stats
         updateStreak();
@@ -3491,7 +3465,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update goals progress
         if (app.goals && app.goals.length > 0) {
             app.goals.forEach(goal => updateGoalProgress(goal));
+            save();
         }
+        refresh();
 
         // Trigger celebration animation if session was just completed (not uncompleted)
         if (s.completed && !wasCompleted) {
@@ -3499,33 +3475,6 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => {
                 triggerFiestaCelebration(id);
             }, 100);
-        }
-
-        // Save in background (non-blocking)
-        try {
-            // Save to user_data
-            save().catch(error => {
-                console.warn('Error guardando sesión completada:', error);
-                // Revert the change if save failed
-                s.completed = wasCompleted;
-                refresh({ preserveTab: true });
-            });
-
-            // Also update in sessions table (non-blocking)
-            if (typeof supabaseService !== 'undefined') {
-                const isAvailable = await supabaseService.isAvailable();
-                if (isAvailable) {
-                    supabaseService.saveSession(s).catch(error => {
-                        console.warn('Error actualizando sesión completada en tabla sessions:', error);
-                        // Continue even if sessions table update fails
-                    });
-                }
-            }
-        } catch (error) {
-            console.warn('Error en toggleCompleted:', error);
-            // Revert the change if save failed
-            s.completed = wasCompleted;
-            refresh({ preserveTab: true });
         }
     }
     function addExercise(sessionId, name) {
@@ -3668,9 +3617,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let setUpdateTimer = null;
     let focusedInput = null;
 
-    // Debounce for set updates to reduce save calls
-    let setUpdateDebounce = null;
-    
     function updateSet(sessionId, exId, setId, field, value, skipRefresh = false) {
         const s = app.sessions.find(x => x.id === sessionId); if (!s) return;
         const ex = s.exercises.find(e => e.id === exId); if (!ex) return;
@@ -3844,38 +3790,12 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    // Cache for stats to avoid recalculating unnecessarily
-    let statsCache = {
-        metric: null,
-        exercise: null,
-        period: null,
-        data: null,
-        timestamp: 0
-    };
-    const STATS_CACHE_TTL = 1000; // 1 second cache
-    
     // Función buildStats modificada - usa los mismos filtros compartidos que drawChart
     function buildStats() {
         const body = $('#statsBody');
         const sharedMetric = $('#sharedMetric');
         const sharedExercise = $('#sharedExercise');
         const sharedPeriod = $('#sharedPeriod');
-        
-        // Check cache
-        const currentMetric = sharedMetric?.value || app.chartState.metric || 'volume';
-        const currentExercise = sharedExercise?.value || app.chartState.exercise || 'all';
-        const currentPeriod = sharedPeriod?.value || app.chartState.period || 8;
-        const now = Date.now();
-        
-        if (statsCache.metric === currentMetric &&
-            statsCache.exercise === currentExercise &&
-            statsCache.period === currentPeriod &&
-            (now - statsCache.timestamp) < STATS_CACHE_TTL &&
-            statsCache.data) {
-            // Use cached data
-            body.innerHTML = statsCache.data;
-            return;
-        }
 
         if (!body) return;
 
@@ -4071,11 +3991,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     const firstWeekAvgRir = firstWeekStats.rirCount > 0 ? firstWeekStats.rirSum / firstWeekStats.rirCount : 0;
 
-                    // Get current week value (most recent data)
-                    // When no comparison period exists, compare current week with first week
-                    // This gives a meaningful progress percentage (Current vs Start)
+                    // Get first week value based on metric
+                    // When no comparison period exists, compare last week of current period with first week
+                    // This gives a meaningful progress percentage (week-to-week comparison)
                     const lastWeekSessions = [];
-                    const lastWeekStart = base; // Current week
+                    const lastWeekStart = addDays(base, -(period - 1) * 7);
                     const lastWeekEnd = addDays(lastWeekStart, 6);
                     currentPeriodSessions.forEach(s => {
                         const d = parseLocalDate(s.date);
@@ -4222,8 +4142,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (baseValue > 0 && currentValue > 0) {
                 const diff = ((currentValue - baseValue) / baseValue * 100);
-                // If difference is very small (less than 0.1%) or exactly 0, treat as same
-                if (Math.abs(diff) < 0.1 || Math.abs(diff) === 0) {
+                // If difference is very small (less than 0.1%), treat as same
+                if (Math.abs(diff) < 0.1) {
                     // Show as "Sin cambio" (no change) in yellow
                     progressText = 'Sin cambio';
                     progressClass = 'progress--same';
@@ -4259,18 +4179,7 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
         }).join('');
 
-        const finalHTML = rows || '<tr><td colspan="7" style="padding:16px">No hay datos suficientes</td></tr>';
-        body.innerHTML = finalHTML;
-        
-        // Update cache
-        const now = Date.now();
-        statsCache = {
-            metric: sharedMetric?.value || app.chartState.metric || 'volume',
-            exercise: sharedExercise?.value || app.chartState.exercise || 'all',
-            period: sharedPeriod?.value || app.chartState.period || 8,
-            data: finalHTML,
-            timestamp: now
-        };
+        body.innerHTML = rows || '<tr><td colspan="7" style="padding:16px">No hay datos suficientes</td></tr>';
     }
 
     function buildChartState() {
@@ -5358,20 +5267,9 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
-        // Semana - Fix: Add debounce to prevent skipping weeks
-        let weekNavTimeout = null;
-        $('#prevWeek').addEventListener('click', () => {
-            if (weekNavTimeout) return; // Prevent multiple clicks
-            app.weekOffset--;
-            refresh();
-            weekNavTimeout = setTimeout(() => { weekNavTimeout = null; }, 300);
-        });
-        $('#nextWeek').addEventListener('click', () => {
-            if (weekNavTimeout) return; // Prevent multiple clicks
-            app.weekOffset++;
-            refresh();
-            weekNavTimeout = setTimeout(() => { weekNavTimeout = null; }, 300);
-        });
+        // Semana
+        $('#prevWeek').addEventListener('click', () => { app.weekOffset--; refresh(); });
+        $('#nextWeek').addEventListener('click', () => { app.weekOffset++; refresh(); });
 
         // Delete week button
         $('#btnDeleteWeek').addEventListener('click', () => {
@@ -6117,57 +6015,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /* =================== Refresh =================== */
-    // Cache for render state to avoid unnecessary re-renders
-    let lastRenderState = {
-        weekOffset: null,
-        sessionsCount: null,
-        routinesCount: null,
-        profileHash: null
-    };
-    
-    function render(force = false) {
-        const currentState = {
-            weekOffset: app.weekOffset,
-            sessionsCount: app.sessions.length,
-            routinesCount: app.routines.length,
-            profileHash: JSON.stringify(app.profile).slice(0, 100) // Quick hash
-        };
-        
-        // Skip render if nothing changed (unless forced)
-        if (!force && 
-            lastRenderState.weekOffset === currentState.weekOffset &&
-            lastRenderState.sessionsCount === currentState.sessionsCount &&
-            lastRenderState.routinesCount === currentState.routinesCount &&
-            lastRenderState.profileHash === currentState.profileHash) {
-            return;
-        }
-        
-        lastRenderState = currentState;
-        
-        // Use requestAnimationFrame for smoother rendering
-        requestAnimationFrame(() => {
-            renderWeekbar();
-            renderSummary();
-            renderSessions();
-            renderRoutines();
-            renderProfile();
-            renderGoals();
-            renderRecentAchievements();
-            renderAllAchievements();
-            initWeekSelector();
-        });
+    function render() {
+        renderWeekbar();
+        renderSummary();
+        renderSessions();
+        renderRoutines();
+        renderProfile();
+        renderGoals();
+        renderRecentAchievements();
+        renderAllAchievements();
+        initWeekSelector();
     }
 
     function refresh({ preserveTab } = {}) {
         render();
         const statsVisible = $('#panel-stats').getAttribute('aria-hidden') === 'false';
         if (statsVisible || !preserveTab) {
-            // Defer stats calculation to avoid blocking
-            requestAnimationFrame(() => {
-                buildStats();
-                resizeCanvas();
-                drawChart();
-            });
+            buildStats();
+            resizeCanvas();
+            drawChart();
         }
     }
 
@@ -6193,24 +6059,17 @@ document.addEventListener('DOMContentLoaded', () => {
             return false;
         }
 
-        // Check for existing session - Fix: Don't require login if already authenticated
-        try {
-            const session = await supabaseService.getSession();
-            if (session && session.user) {
-                // User is authenticated - keep them logged in
-                hideAuthScreen();
-                showMainApp();
-                setupAuthUI(true);
-                await setupRealtimeSync();
-                return true;
-            } else {
-                // No session - show auth screen
-                showAuthScreen();
-                return false;
-            }
-        } catch (error) {
-            console.warn('Error checking session:', error);
-            // If error checking session, show auth screen
+        // Check for existing session
+        const session = await supabaseService.getSession();
+        if (session) {
+            // User is authenticated
+            hideAuthScreen();
+            showMainApp();
+            setupAuthUI(true);
+            await setupRealtimeSync();
+            return true;
+        } else {
+            // Show auth screen
             showAuthScreen();
             return false;
         }
@@ -6251,20 +6110,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const signupFields = $('#signupFields');
         const firstNameInput = $('#authFirstName');
         const lastNameInput = $('#authLastName');
-        const forgotPasswordBtn = $('#btnForgotPassword');
 
         if (tab === 'signin') {
             if (submitBtn) submitBtn.textContent = 'Iniciar Sesión';
             if (signupFields) signupFields.style.display = 'none';
             if (firstNameInput) firstNameInput.removeAttribute('required');
             if (lastNameInput) lastNameInput.removeAttribute('required');
-            if (forgotPasswordBtn) forgotPasswordBtn.style.display = 'block';
         } else {
             if (submitBtn) submitBtn.textContent = 'Registrarse';
             if (signupFields) signupFields.style.display = 'block';
             if (firstNameInput) firstNameInput.setAttribute('required', 'required');
             if (lastNameInput) lastNameInput.setAttribute('required', 'required');
-            if (forgotPasswordBtn) forgotPasswordBtn.style.display = 'none';
         }
     }
 
@@ -6337,67 +6193,32 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (result) {
-                // Handle signup - show email confirmation message
-                if (activeTab === 'signup') {
-                    // Check if email confirmation is required
-                    if (result.user && !result.session) {
-                        // Email confirmation required
-                        const successDiv = $('#authSuccess');
-                        const errorDiv = $('#authError');
-                        if (errorDiv) errorDiv.style.display = 'none';
-                        if (successDiv) {
-                            successDiv.textContent = '¡Registro exitoso! Por favor, revisa tu correo electrónico para confirmar tu cuenta antes de iniciar sesión.';
-                            successDiv.style.display = 'block';
-                        }
-                        // Reset form
-                        const authForm = $('#authForm');
-                        if (authForm) authForm.reset();
-                        return; // Don't proceed to login
-                    }
-                }
-
-                // Optimize: Load data only once and parallelize operations
+                // Load user profile if signing in
                 if (activeTab === 'signin') {
-                    // Load data and get user metadata in parallel
-                    const [user] = await Promise.all([
-                        supabaseService.getCurrentUser()
-                    ]);
-                    
+                    await load();
+                    // Try to get user metadata from Supabase
+                    const user = await supabaseService.getCurrentUser();
                     if (user && user.user_metadata) {
                         if (user.user_metadata.firstName) app.profile.firstName = user.user_metadata.firstName;
                         if (user.user_metadata.lastName) app.profile.lastName = user.user_metadata.lastName;
                         if (user.email) app.profile.email = user.email;
+                        await save();
                     }
                 }
 
                 hideAuthScreen();
                 showMainApp();
                 setupAuthUI(true);
-                
-                // Parallelize: Load data, setup sync, and bind events
-                await Promise.all([
-                    load(),
-                    setupRealtimeSync()
-                ]);
-                
+                await setupRealtimeSync();
+                // Reload data from Supabase
+                await load();
                 // Initialize app if not already done
                 bindEvents();
-                
-                // Parallelize: Render and update stats
                 render();
-                Promise.all([
-                    Promise.resolve(updateStreak()),
-                    Promise.resolve(updateWeeklyGoal()),
-                    Promise.resolve(checkAchievements())
-                ]).then(() => {
-                    // Fix: Only show toast once, check if already shown
-                    if (!window.sessionToastShown) {
-                        toast('Sesión iniciada correctamente', 'ok');
-                        window.sessionToastShown = true;
-                        // Reset flag after 2 seconds
-                        setTimeout(() => { window.sessionToastShown = false; }, 2000);
-                    }
-                });
+                updateStreak();
+                updateWeeklyGoal();
+                checkAchievements();
+                toast('Sesión iniciada correctamente', 'ok');
             }
         } catch (error) {
             console.error('Auth error:', error);
@@ -6444,27 +6265,6 @@ document.addEventListener('DOMContentLoaded', () => {
             render();
             toast('Datos actualizados', 'ok');
         });
-
-        // Fix: Listen to auth state changes but don't auto-signout
-        // Only handle token refresh, not sign out events
-        if (supabase && supabase.auth) {
-            supabase.auth.onAuthStateChange((event, session) => {
-                // Only handle token refresh, ignore SIGNED_OUT to prevent auto-logout
-                if (event === 'TOKEN_REFRESHED' && session) {
-                    console.log('Token refreshed, session maintained');
-                    // Session is still valid, keep user logged in
-                } else if (event === 'SIGNED_OUT') {
-                    // Only show auth screen if user explicitly signed out
-                    // Don't auto-close session on other events
-                    console.log('User signed out');
-                } else if (event === 'SIGNED_IN' && session) {
-                    // User signed in, ensure UI is updated
-                    hideAuthScreen();
-                    showMainApp();
-                    setupAuthUI(true);
-                }
-            });
-        }
     }
 
     // Bind auth events
@@ -6476,11 +6276,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 authTabs.forEach(t => t.classList.remove('active'));
                 tab.classList.add('active');
                 updateAuthForm(tab.dataset.tab);
-                // Clear error and success messages when switching tabs
+                // Clear error message when switching tabs
                 const errorDiv = $('#authError');
-                const successDiv = $('#authSuccess');
                 if (errorDiv) errorDiv.style.display = 'none';
-                if (successDiv) successDiv.style.display = 'none';
             });
         });
 
@@ -6488,58 +6286,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const authForm = $('#authForm');
         if (authForm) {
             authForm.addEventListener('submit', handleAuth);
-        }
-
-        // Forgot password button
-        const forgotPasswordBtn = $('#btnForgotPassword');
-        if (forgotPasswordBtn) {
-            forgotPasswordBtn.addEventListener('click', async (e) => {
-                e.preventDefault();
-                const email = $('#authEmail')?.value.trim();
-                const errorDiv = $('#authError');
-                const successDiv = $('#authSuccess');
-
-                if (!email) {
-                    if (errorDiv) {
-                        errorDiv.textContent = 'Por favor ingresa tu email para recuperar la contraseña';
-                        errorDiv.style.display = 'block';
-                    }
-                    if (successDiv) successDiv.style.display = 'none';
-                    return;
-                }
-
-                // Validate email domain
-                if (!validateEmail(email)) {
-                    if (errorDiv) {
-                        errorDiv.textContent = 'Solo se permiten correos de: @gmail.com, @outlook.com, @hotmail.com, @yahoo.com';
-                        errorDiv.style.display = 'block';
-                    }
-                    if (successDiv) successDiv.style.display = 'none';
-                    return;
-                }
-
-                try {
-                    if (typeof supabaseService === 'undefined') {
-                        throw new Error('Supabase no está configurado');
-                    }
-
-                    await supabaseService.resetPassword(email);
-                    
-                    // Show success message
-                    if (errorDiv) errorDiv.style.display = 'none';
-                    if (successDiv) {
-                        successDiv.textContent = 'Se ha enviado un enlace de recuperación a tu correo electrónico. Por favor, revisa tu bandeja de entrada.';
-                        successDiv.style.display = 'block';
-                    }
-                } catch (error) {
-                    console.error('Reset password error:', error);
-                    if (errorDiv) {
-                        errorDiv.textContent = error.message || 'Error al enviar el enlace de recuperación';
-                        errorDiv.style.display = 'block';
-                    }
-                    if (successDiv) successDiv.style.display = 'none';
-                }
-            });
         }
 
         // Real-time email validation
@@ -6568,57 +6314,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Only load app data if authenticated
         if (isAuthenticated) {
-            // Load data first
+            // Load data
             await load();
-            
-            // Bind events immediately for responsiveness
             bindEvents();
-            
-            // Render immediately for visual feedback
             render();
-            
-            // Initialize competitive mode in parallel (non-blocking)
-            Promise.all([
-                Promise.resolve(updateStreak()),
-                Promise.resolve(updateWeeklyGoal()),
-                Promise.resolve(checkAchievements())
-            ]).catch(err => console.warn('Error updating stats:', err));
+            // Initialize competitive mode on load
+            updateStreak();
+            updateWeeklyGoal();
+            checkAchievements();
 
-            // Sync profile to Supabase after loading (non-blocking)
+            // Sync profile to Supabase after loading
             if (app.profile) {
-                syncProfileToSupabase(app.profile.firstName, app.profile.lastName).catch(err => 
-                    console.warn('Error syncing profile:', err)
-                );
+                syncProfileToSupabase(app.profile.firstName, app.profile.lastName);
             }
         } else {
-            // Fix: Double-check session one more time in case it was just created
-            // This handles the case where session exists but initAuth didn't catch it
-            setTimeout(async () => {
-                if (typeof supabaseService !== 'undefined') {
-                    const session = await supabaseService.getSession();
-                    if (session && session.user) {
-                        // Session exists, show main app
-                        hideAuthScreen();
-                        showMainApp();
-                        setupAuthUI(true);
-                        // Parallelize operations for faster loading
-                        await Promise.all([
-                            setupRealtimeSync(),
-                            load()
-                        ]);
-                        
-                        bindEvents();
-                        render();
-                        
-                        // Update stats in parallel (non-blocking)
-                        Promise.all([
-                            Promise.resolve(updateStreak()),
-                            Promise.resolve(updateWeeklyGoal()),
-                            Promise.resolve(checkAchievements())
-                        ]).catch(err => console.warn('Error updating stats:', err));
-                    }
-                }
-            }, 500);
+            // Just bind events for auth screen
+            // Don't load app data until authenticated
         }
     })();
 
@@ -7165,16 +6876,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .eq('receiver_id', user.id)
             .eq('status', 'accepted');
 
-        const allFriendsRaw = [...(friends1 || []).map(r => r.friend), ...(friends2 || []).map(r => r.friend)];
-        
-        // Fix: Remove duplicates by friend ID
-        const seenFriendIds = new Set();
-        const allFriends = allFriendsRaw.filter(f => {
-            if (!f || !f.id) return false;
-            if (seenFriendIds.has(f.id)) return false;
-            seenFriendIds.add(f.id);
-            return true;
-        });
+        const allFriends = [...(friends1 || []).map(r => r.friend), ...(friends2 || []).map(r => r.friend)];
 
         const friendsList = $('#friendsList');
         friendsList.innerHTML = '';
